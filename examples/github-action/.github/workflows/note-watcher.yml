@@ -11,7 +11,10 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - run: pip install .
+      - uses: anthropics/anthropic-cookbook/.github/actions/claude-code@main
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+      - run: pip install note-watcher
       - run: note-watcher process --all --vault .
       - name: Commit results
         run: |
