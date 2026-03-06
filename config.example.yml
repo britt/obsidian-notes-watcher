@@ -1,0 +1,29 @@
+# Note Watcher Configuration
+# Copy to ~/.config/note-watcher/config.yml
+
+# Path to your Obsidian vault
+vault: ~/Obsidian/MyVault
+
+# Seconds to wait before processing a file after a change
+# (prevents duplicate processing during rapid saves)
+debounce_seconds: 1.0
+
+# File patterns to ignore (glob syntax)
+ignore_patterns:
+  - "*.excalidraw.md"
+  - ".trash/**"
+
+# Agent definitions
+agents:
+  # Built-in echo agent (returns instruction text unchanged)
+  summarizer:
+    type: echo
+
+  # Built-in uppercase agent (returns instruction text in uppercase)
+  uppercase:
+    type: uppercase
+
+  # Example command agent (runs a shell command)
+  # word_count:
+  #   type: command
+  #   command: "wc -w"

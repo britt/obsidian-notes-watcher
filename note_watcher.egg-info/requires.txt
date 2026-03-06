@@ -1,0 +1,7 @@
+watchdog>=3.0
+pyyaml>=6.0
+click>=8.0
+
+[dev]
+pytest>=7.0
+pytest-cov>=4.0

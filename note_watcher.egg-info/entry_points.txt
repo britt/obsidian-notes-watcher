@@ -1,0 +1,2 @@
+[console_scripts]
+note-watcher = note_watcher.cli:main
