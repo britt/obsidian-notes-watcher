@@ -90,9 +90,9 @@ class TestProcessFileReparse:
         assert count == 1
 
         content = note.read_text()
-        assert "<!-- @done echo -->" in content
+        assert "<!-- @done echo: Hello world" in content
         assert "Hello world" in content
-        assert "<!-- /@done -->" in content
+        assert "/@done -->" in content
         assert "@echo Hello world" not in content
 
     def test_processes_multiple_instructions(
@@ -113,16 +113,16 @@ class TestProcessFileReparse:
         assert "SECOND INSTRUCTION" in content
         # Both should be wrapped in done markers
         assert content.count("<!-- @done") == 2
-        assert content.count("<!-- /@done -->") == 2
+        assert content.count("/@done -->") == 2
 
     def test_skips_already_processed(
         self, tmp_path: Path, dispatcher: AgentDispatcher
     ) -> None:
         note = tmp_path / "note.md"
         note.write_text(
-            "<!-- @done echo -->\n"
+            "<!-- @done echo: Previous task\n"
             "Already done\n"
-            "<!-- /@done -->\n"
+            "/@done -->\n"
             "\n"
             "@uppercase Process me\n"
         )

@@ -33,9 +33,9 @@ class TestParseInstructions:
 
     def test_skips_completed_markers(self) -> None:
         content = (
-            "<!-- @done summarizer -->\n"
+            "<!-- @done summarizer: Summarize this\n"
             "Already processed result\n"
-            "<!-- /@done -->\n"
+            "/@done -->\n"
             "\n"
             "@uppercase Still pending\n"
         )
@@ -79,13 +79,13 @@ class TestParseInstructions:
 
     def test_multiple_done_blocks(self) -> None:
         content = (
-            "<!-- @done summarizer -->\n"
+            "<!-- @done summarizer: Task 1\n"
             "Result 1\n"
-            "<!-- /@done -->\n"
+            "/@done -->\n"
             "\n"
-            "<!-- @done uppercase -->\n"
+            "<!-- @done uppercase: Task 2\n"
             "Result 2\n"
-            "<!-- /@done -->\n"
+            "/@done -->\n"
             "\n"
             "@echo Still here\n"
         )
@@ -96,9 +96,9 @@ class TestParseInstructions:
     def test_nested_at_symbols_in_done_block(self) -> None:
         """@ mentions inside done blocks should be ignored."""
         content = (
-            "<!-- @done summarizer -->\n"
+            "<!-- @done summarizer: Summarize this\n"
             "@uppercase This is inside done block\n"
-            "<!-- /@done -->\n"
+            "/@done -->\n"
         )
         instructions = parse_instructions(content)
         assert instructions == []

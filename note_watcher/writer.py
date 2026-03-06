@@ -12,17 +12,22 @@ if TYPE_CHECKING:
     from note_watcher.parser import Instruction
 
 
-def format_result(agent_name: str, result: str) -> str:
+def format_result(agent_name: str, instruction_text: str, result: str) -> str:
     """Format an agent result with completed markers.
+
+    The entire result is enclosed in a single HTML comment so it is hidden
+    from rendered markdown.  The original instruction text is preserved on
+    the opening line after the agent name.
 
     Args:
         agent_name: Name of the agent that produced the result.
+        instruction_text: The original instruction text from the @ mention.
         result: The agent's output text.
 
     Returns:
-        The result wrapped in completed marker comments.
+        The result wrapped in a single HTML comment block.
     """
-    return f"<!-- @done {agent_name} -->\n{result}\n<!-- /@done -->"
+    return f"<!-- @done {agent_name}: {instruction_text}\n{result}\n/@done -->"
 
 
 def write_result(
@@ -62,7 +67,9 @@ def write_result(
         )
 
     # Replace the instruction line with the formatted result
-    formatted = format_result(instruction.agent_name, result)
+    formatted = format_result(
+        instruction.agent_name, instruction.instruction_text, result
+    )
     lines[line_idx] = formatted
 
     # Write back

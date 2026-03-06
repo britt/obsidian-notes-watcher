@@ -42,7 +42,7 @@ class TestProcessCommand:
         # Verify the file was updated
         content = note.read_text()
         assert "HELLO WORLD" in content
-        assert "<!-- @done uppercase -->" in content
+        assert "<!-- @done uppercase: hello world" in content
 
     def test_process_no_instructions(self, runner: CliRunner, tmp_path: Path) -> None:
         """Process command with no pending instructions."""
