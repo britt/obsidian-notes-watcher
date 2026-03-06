@@ -14,8 +14,10 @@ from dataclasses import dataclass
 INSTRUCTION_PATTERN = re.compile(r"^@(\w+)\s+(.+)$")
 
 # Markers for completed instructions
-DONE_START_PATTERN = re.compile(r"^<!--\s*@done\s+(\w+)\s*-->$")
-DONE_END_PATTERN = re.compile(r"^<!--\s*/@done\s*-->$")
+# New format: <!-- @done agent_name: instruction text  (no closing -->)
+# Old format: <!-- @done agent_name -->  (kept for backwards compatibility)
+DONE_START_PATTERN = re.compile(r"^<!--\s*@done\s+(\w+).*$")
+DONE_END_PATTERN = re.compile(r"^.*/@done\s*-->$")
 
 
 @dataclass

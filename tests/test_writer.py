@@ -10,22 +10,22 @@ class TestFormatResult:
     """Tests for format_result()."""
 
     def test_basic_format(self) -> None:
-        result = format_result("summarizer", "This is the summary.")
+        result = format_result("summarizer", "Do something", "This is the summary.")
         assert result == (
-            "<!-- @done summarizer -->\n"
+            "<!-- @done summarizer: Do something\n"
             "This is the summary.\n"
-            "<!-- /@done -->"
+            "/@done -->"
         )
 
     def test_multiline_result(self) -> None:
-        result = format_result("agent", "Line 1\nLine 2\nLine 3")
+        result = format_result("agent", "Task", "Line 1\nLine 2\nLine 3")
         assert "Line 1\nLine 2\nLine 3" in result
-        assert result.startswith("<!-- @done agent -->")
-        assert result.endswith("<!-- /@done -->")
+        assert result.startswith("<!-- @done agent: Task")
+        assert result.endswith("/@done -->")
 
     def test_empty_result(self) -> None:
-        result = format_result("agent", "")
-        assert result == "<!-- @done agent -->\n\n<!-- /@done -->"
+        result = format_result("agent", "Task", "")
+        assert result == "<!-- @done agent: Task\n\n/@done -->"
 
 
 class TestWriteResult:
@@ -46,9 +46,9 @@ class TestWriteResult:
 
         content = note.read_text()
         assert "@summarizer Do something" not in content
-        assert "<!-- @done summarizer -->" in content
+        assert "<!-- @done summarizer: Do something" in content
         assert "The result" in content
-        assert "<!-- /@done -->" in content
+        assert "/@done -->" in content
         assert "# Title" in content
         assert "More text" in content
 
@@ -68,7 +68,7 @@ class TestWriteResult:
         content = note.read_text()
         lines = content.split("\n")
         assert lines[0] == "Before"
-        assert "<!-- @done agent -->" in content
+        assert "<!-- @done agent: Task" in content
         assert "Done" in content
         assert "After" in lines[-2] or "After" in lines[-1]
 

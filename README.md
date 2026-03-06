@@ -1,17 +1,16 @@
 # Note Watcher
 
-A daemon that detects `@` mentions in Obsidian markdown notes, dispatches instructions to configured agents, and writes results back inline.
+A daemon that detects `@` mentions in Obsidian markdown notes, dispatches instructions to configured agents, and writes results back as HTML comments.
 
-Write `@agent_name do something` in any note, and Note Watcher replaces it with the agent's output:
+Write `@agent_name do something` in any note, and Note Watcher replaces it with the agent's output wrapped in a single HTML comment (invisible in rendered markdown):
 
 ```markdown
-<!-- @done agent_name -->
-do something
+<!-- @done agent_name: do something
 Agent output goes here.
-<!-- /@done -->
+/@done -->
 ```
 
-Processed instructions are wrapped in `<!-- @done -->` markers so they are never reprocessed.
+Processed instructions are wrapped in `<!-- @done ... /@done -->` comment blocks so they are never reprocessed and stay hidden when the note is rendered.
 
 ## Modes of Operation
 
@@ -84,6 +83,23 @@ agents:
 | `uppercase` | Returns the instruction text in uppercase |
 | `command` | Runs a shell command with instruction text on stdin, returns stdout |
 
+### Example: Using Claude Code as an agent
+
+Configure a `command` agent that dispatches instructions to [Claude Code](https://docs.anthropic.com/en/docs/claude-code):
+
+```yaml
+agents:
+  claude:
+    type: command
+    command: "claude -p"   # Dispatches instruction to Claude Code CLI
+```
+
+Then write `@claude` instructions in your notes:
+
+```markdown
+@claude Summarize the key points of this meeting
+```
+
 ## Daemon Mode
 
 Daemon mode continuously watches your Obsidian vault for changes and processes `@` mentions in real time.
@@ -144,7 +160,7 @@ note-watcher process --all --vault /path/to/vault
 
 ### Setting up the GitHub Actions workflow
 
-Add the following workflow to your repository at `.github/workflows/note-watcher.yml`:
+Add the following workflow to your repository at `.github/workflows/note-watcher.yml`. This example uses [Claude Code](https://docs.anthropic.com/en/docs/claude-code) as the AI agent:
 
 ```yaml
 name: Note Watcher
@@ -160,6 +176,9 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+      - uses: anthropics/anthropic-cookbook/.github/actions/claude-code@main
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
       - run: pip install .
       - run: note-watcher process --all --vault .
       - name: Commit results
@@ -174,9 +193,12 @@ jobs:
 This workflow:
 
 - Triggers on any push that modifies `.md` files
+- Sets up Claude Code via the [Claude Code GitHub Action](https://docs.anthropic.com/en/docs/claude-code/github-actions) for AI-powered processing
 - Installs Note Watcher and processes all unprocessed instructions
 - Commits the results back to the repository using a bot identity
 - Uses `[skip ci]` in the commit message to prevent infinite workflow loops
+
+> **Tip:** For AI-powered processing, configure a Claude Code agent (e.g., `command: "claude -p"`). See the [Claude Code GitHub Actions documentation](https://docs.anthropic.com/en/docs/claude-code/github-actions) for setup details.
 
 **Note:** The repository's default `GITHUB_TOKEN` must have write permissions for the commit step to succeed. Under **Settings > Actions > General**, set "Workflow permissions" to "Read and write permissions".
 

@@ -66,9 +66,9 @@ class TestEndToEnd:
         assert "# My Note" in final
         assert "Here is some context." in final
         assert "More content below." in final
-        assert "<!-- @done echo -->" in final
+        assert "<!-- @done echo: Repeat this back to me" in final
         assert "Repeat this back to me" in final
-        assert "<!-- /@done -->" in final
+        assert "/@done -->" in final
         assert "@echo Repeat this back to me" not in final
 
     def test_full_pipeline_multiple_instructions(
@@ -88,7 +88,7 @@ class TestEndToEnd:
         assert "First" in final
         assert "SECOND" in final
         assert final.count("<!-- @done") == 2
-        assert final.count("<!-- /@done -->") == 2
+        assert final.count("/@done -->") == 2
 
     def test_reprocessing_skips_completed(
         self, tmp_path: Path, dispatcher: AgentDispatcher
@@ -102,7 +102,7 @@ class TestEndToEnd:
         assert count1 == 1
 
         content_after_first = note.read_text()
-        assert "<!-- @done echo -->" in content_after_first
+        assert "<!-- @done echo: Process me once" in content_after_first
 
         # Second run - should find nothing to process
         count2 = process_file_reparse(str(note), dispatcher)
@@ -117,9 +117,9 @@ class TestEndToEnd:
         """File with both completed and pending instructions."""
         note = tmp_path / "note.md"
         note.write_text(
-            "<!-- @done echo -->\n"
+            "<!-- @done echo: Previous task\n"
             "Already processed\n"
-            "<!-- /@done -->\n"
+            "/@done -->\n"
             "\n"
             "@uppercase Process this new one\n"
         )
@@ -163,8 +163,8 @@ class TestEndToEnd:
         assert "Processed 2 instruction" in result.output
 
         # Verify both files were processed
-        assert "<!-- @done echo -->" in (tmp_path / "note1.md").read_text()
-        assert "<!-- @done uppercase -->" in (tmp_path / "note2.md").read_text()
+        assert "<!-- @done echo: From file 1" in (tmp_path / "note1.md").read_text()
+        assert "<!-- @done uppercase: From file 2" in (tmp_path / "note2.md").read_text()
         # Untouched file should be unchanged
         assert (tmp_path / "note3.md").read_text() == "# No instructions here\n"
 
