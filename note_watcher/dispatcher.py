@@ -148,7 +148,7 @@ class AgentDispatcher:
             capture_output=True,
             text=True,
             shell=True,
-            timeout=30,
+            timeout=agent_config.timeout,
             env=env,
         )
         if result.returncode != 0:

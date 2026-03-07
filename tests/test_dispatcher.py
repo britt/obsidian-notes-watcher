@@ -82,6 +82,25 @@ class TestAgentDispatcher:
         result = dispatcher.dispatch(instruction)
         assert "hello from command" in result
 
+    def test_command_agent_uses_configured_timeout(self, tmp_path) -> None:
+        """Command agent uses the timeout from AgentConfig."""
+        config = Config(
+            vault=tmp_path,
+            agents={
+                "slow_agent": AgentConfig(
+                    name="slow_agent",
+                    type="command",
+                    command="sleep 2 && echo done",
+                    timeout=1,
+                ),
+            },
+        )
+        dispatcher = AgentDispatcher(config)
+        instruction = _make_instruction("slow_agent", "wait")
+        import subprocess
+        with pytest.raises(subprocess.TimeoutExpired):
+            dispatcher.dispatch(instruction)
+
     def test_unsupported_agent_type_raises(self, tmp_path) -> None:
         """An agent with an unrecognized type should raise."""
         config = Config(

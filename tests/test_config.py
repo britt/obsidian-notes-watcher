@@ -107,6 +107,15 @@ class TestAgentConfig:
         assert agent.system_prompt is None
         assert agent.system_prompt_file == "prompts/claude.md"
 
+    def test_default_timeout(self) -> None:
+        agent = AgentConfig.from_dict("test", {"type": "echo"})
+        assert agent.timeout == 900
+
+    def test_from_dict_with_custom_timeout(self) -> None:
+        data = {"type": "command", "command": "echo", "timeout": 600}
+        agent = AgentConfig.from_dict("test", data)
+        assert agent.timeout == 600
+
     def test_from_dict_both_system_prompt_fields_raises(self) -> None:
         with pytest.raises(ValueError, match="Cannot set both"):
             AgentConfig.from_dict(
