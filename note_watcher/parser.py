@@ -11,7 +11,7 @@ from dataclasses import dataclass
 
 
 # Pattern to match @ mention instructions: @agent_name followed by instruction text
-INSTRUCTION_PATTERN = re.compile(r"^@(\w+)\s+(.+)$")
+INSTRUCTION_PATTERN = re.compile(r"^@(\w+)[,:;.]?\s+(.+)$")
 
 # Markers for completed instructions
 # New format: <!-- @done agent_name: instruction text  (no closing -->)

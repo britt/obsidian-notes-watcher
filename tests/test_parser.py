@@ -114,6 +114,24 @@ class TestParseInstructions:
         instructions = parse_instructions(content)
         assert len(instructions) == 1
 
+    def test_agent_name_with_trailing_colon(self) -> None:
+        """@agent: should match agent name 'agent', ignoring the colon."""
+        content = "@echo: hello world"
+        instructions = parse_instructions(content)
+        assert len(instructions) == 1
+        assert instructions[0].agent_name == "echo"
+        assert instructions[0].instruction_text == "hello world"
+
+    def test_agent_name_with_trailing_punctuation(self) -> None:
+        """Trailing punctuation like comma, semicolon, period should be stripped."""
+        for punct in [":", ",", ";", "."]:
+            content = f"@echo{punct} hello world"
+            result = parse_instructions(content)
+            msg = f"Failed for punctuation: {punct}"
+            assert len(result) == 1, msg
+            assert result[0].agent_name == "echo", msg
+            assert result[0].instruction_text == "hello world", msg
+
     def test_at_mention_in_middle_of_line_not_extracted(self) -> None:
         """Only @ mentions at the start of a line are extracted."""
         content = "Contact me at @summarizer for details"
