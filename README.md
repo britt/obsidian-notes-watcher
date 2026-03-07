@@ -85,58 +85,70 @@ agents:
 
 ### System prompts
 
-Command agents support an optional system prompt that provides context to the agent. You can define it inline or load it from a file:
+Command agents include a default system prompt that tells the agent about the vault, the note being processed, and how to respond. The default prompt is:
+
+> You are working in an Obsidian vault at {vault_path}.
+> The user has left an instruction in the note at {file_path}.
+> Read the note, then modify it as requested by the instruction.
+> If the user asks for changes to a note without specifying which one, apply the changes to the same note that contains the instruction.
+> After making your changes, commit them to git.
+> Respond with a brief summary of what you did.
+
+This works out of the box — you only need to configure a system prompt if you want different behavior.
+
+#### Overriding the default prompt
+
+To replace the default, set `system_prompt` inline or load it from a file with `system_prompt_file`. Setting either one **completely replaces** the default prompt.
 
 ```yaml
 agents:
   claude:
     type: command
     command: "claude --print"
-    # Inline system prompt
+    # Inline — replaces the default prompt entirely
     system_prompt: |
-      You are working in an Obsidian vault at {vault_path}.
-      The user has left an instruction in the note at {file_path}.
-      Read the note, then modify it as requested.
+      You are a note-taking assistant working in {vault_path}.
+      Edit the note at {file_path} as instructed.
+      Do not commit changes — the caller will handle that.
 
   claude-from-file:
     type: command
     command: "claude --print"
     # Load from a file (path relative to the config file's directory)
+    # Also replaces the default prompt entirely
     system_prompt_file: prompts/claude.md
 ```
 
-System prompts support two template variables that are interpolated at dispatch time:
+You cannot set both `system_prompt` and `system_prompt_file` on the same agent — Note Watcher will raise an error if you do.
+
+#### Template variables
+
+System prompts (including the default) support template variables that are interpolated at dispatch time:
 
 | Variable | Value |
 |----------|-------|
 | `{vault_path}` | Absolute path to the Obsidian vault |
 | `{file_path}` | Path to the note containing the `@` instruction |
 
-The resolved prompt is passed to the command via the `NOTE_WATCHER_SYSTEM_PROMPT` environment variable. Two additional environment variables are always set for command agents:
+#### Environment variables
+
+The resolved prompt is always passed to the command via the `NOTE_WATCHER_SYSTEM_PROMPT` environment variable. The following environment variables are always set for command agents:
 
 | Environment variable | Value |
 |----------------------|-------|
 | `NOTE_WATCHER_VAULT_PATH` | Absolute path to the vault |
 | `NOTE_WATCHER_FILE_PATH` | Path to the note being processed |
-| `NOTE_WATCHER_SYSTEM_PROMPT` | Resolved system prompt (only if configured) |
-
-You cannot set both `system_prompt` and `system_prompt_file` on the same agent — Note Watcher will raise an error if you do.
+| `NOTE_WATCHER_SYSTEM_PROMPT` | Resolved system prompt (default or custom) |
 
 ### Example: Using Claude Code as an agent
 
-Configure a `command` agent that dispatches instructions to [Claude Code](https://docs.anthropic.com/en/docs/claude-code):
+Configure a `command` agent that dispatches instructions to [Claude Code](https://docs.anthropic.com/en/docs/claude-code). The default system prompt works well for Claude Code, so you only need to set the command:
 
 ```yaml
 agents:
   claude:
     type: command
     command: "claude --print --system-prompt \"$NOTE_WATCHER_SYSTEM_PROMPT\""
-    system_prompt: |
-      You are working in an Obsidian vault at {vault_path}.
-      The user has left an instruction in the note at {file_path}.
-      Read the note, then modify it as requested by the instruction.
-      After making your changes, commit them to git.
-      Respond with a brief summary of what you did.
 ```
 
 Claude Code runs with full access to your vault, so it can edit notes, create new files, and reorganize content — not just respond in a comment. Write `@claude` instructions in your notes:

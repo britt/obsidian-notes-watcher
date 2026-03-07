@@ -33,31 +33,28 @@ When you push changes to `.md` files, the workflow:
 
 ## System prompts
 
-You can give your agent a system prompt to control its behavior. Define it inline in `config.yml` or load it from a file:
+Command agents include a default system prompt that tells the agent about the vault and the note being processed. The default works well for most use cases — you only need to configure a system prompt if you want different behavior.
+
+To override the default, set `system_prompt` inline or load from a file with `system_prompt_file`. Either one **completely replaces** the default:
 
 ```yaml
 agents:
   claude:
     type: command
     command: "claude --print --system-prompt \"$NOTE_WATCHER_SYSTEM_PROMPT\""
+    # Replaces the default prompt entirely
     system_prompt: |
-      You are working in an Obsidian vault at {vault_path}.
-      The user has left an instruction in the note at {file_path}.
-      Read the note, then modify it as requested.
-      Respond with a brief summary of what you did.
-```
+      You are a note assistant in {vault_path}.
+      Edit the note at {file_path} as instructed.
 
-Or load from a file (path relative to the config file):
-
-```yaml
-agents:
-  claude:
+  # Or load from a file (path relative to the config file)
+  claude-from-file:
     type: command
     command: "claude --print --system-prompt \"$NOTE_WATCHER_SYSTEM_PROMPT\""
     system_prompt_file: prompts/claude.md
 ```
 
-The `{vault_path}` and `{file_path}` template variables are replaced at dispatch time. The resolved prompt is set as the `NOTE_WATCHER_SYSTEM_PROMPT` environment variable. See the [system prompts section](../../README.md#system-prompts) in the main README for full details.
+Custom prompts support the same template variables as the default: `{vault_path}` (absolute path to the vault) and `{file_path}` (path to the note being processed). The resolved prompt is always available via the `NOTE_WATCHER_SYSTEM_PROMPT` environment variable. See the [system prompts section](../../README.md#system-prompts) in the main README for full details.
 
 ## Example
 

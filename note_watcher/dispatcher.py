@@ -16,6 +16,16 @@ if TYPE_CHECKING:
     from note_watcher.parser import Instruction
 
 
+DEFAULT_SYSTEM_PROMPT = """\
+You are working in an Obsidian vault at {vault_path}.
+The user has left an instruction in the note at {file_path}.
+Read the note, then modify it as requested by the instruction.
+If the user asks for changes to a note without specifying which one, \
+apply the changes to the same note that contains the instruction.
+After making your changes, commit them to git.
+Respond with a brief summary of what you did."""
+
+
 class UnknownAgentError(Exception):
     """Raised when an instruction references an agent that isn't configured."""
 
@@ -89,7 +99,7 @@ class AgentDispatcher:
 
     def _resolve_system_prompt(
         self, agent_config: AgentConfig, file_path: str
-    ) -> str | None:
+    ) -> str:
         """Load and interpolate the system prompt for an agent."""
         prompt = agent_config.system_prompt
         if prompt is None and agent_config.system_prompt_file:
@@ -97,9 +107,15 @@ class AgentDispatcher:
             prompt_path = config_dir / agent_config.system_prompt_file
             prompt = prompt_path.read_text()
 
-        if prompt is not None:
-            prompt = prompt.replace("{vault_path}", str(self.config.vault))
-            prompt = prompt.replace("{file_path}", file_path)
+        if prompt is None:
+            prompt = DEFAULT_SYSTEM_PROMPT
+
+        prompt = prompt.replace("{vault_path}", str(self.config.vault))
+        prompt = prompt.replace("{file_path}", file_path)
+        prompt += (
+            "\n\nThe user's message will begin with the file path"
+            " of the note being processed."
+        )
         return prompt
 
     def _handle_command(
@@ -122,12 +138,13 @@ class AgentDispatcher:
         env["NOTE_WATCHER_VAULT_PATH"] = str(self.config.vault)
 
         system_prompt = self._resolve_system_prompt(agent_config, file_path)
-        if system_prompt is not None:
-            env["NOTE_WATCHER_SYSTEM_PROMPT"] = system_prompt
+        env["NOTE_WATCHER_SYSTEM_PROMPT"] = system_prompt
+
+        stdin_message = f"File: {file_path}\n\n{instruction.instruction_text}"
 
         result = subprocess.run(
             agent_config.command,
-            input=instruction.instruction_text,
+            input=stdin_message,
             capture_output=True,
             text=True,
             shell=True,
