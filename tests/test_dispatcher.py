@@ -1,5 +1,7 @@
 """Tests for the agent dispatcher."""
 
+import json
+
 import pytest
 
 from note_watcher.config import AgentConfig, Config
@@ -92,3 +94,158 @@ class TestAgentDispatcher:
         instruction = _make_instruction("bad_agent")
         with pytest.raises(UnknownAgentError):
             dispatcher.dispatch(instruction)
+
+
+class TestCommandAgentEnvVars:
+    """Tests for environment variables passed to command agents."""
+
+    def test_command_receives_file_path_env(self, tmp_path) -> None:
+        """Command agent receives NOTE_WATCHER_FILE_PATH env var."""
+        config = Config(
+            vault=tmp_path,
+            agents={
+                "env_agent": AgentConfig(
+                    name="env_agent",
+                    type="command",
+                    command="printenv NOTE_WATCHER_FILE_PATH",
+                ),
+            },
+        )
+        dispatcher = AgentDispatcher(config)
+        instruction = _make_instruction("env_agent")
+        result = dispatcher.dispatch(instruction, file_path="/tmp/notes/test.md")
+        assert result == "/tmp/notes/test.md"
+
+    def test_command_receives_vault_path_env(self, tmp_path) -> None:
+        """Command agent receives NOTE_WATCHER_VAULT_PATH env var."""
+        config = Config(
+            vault=tmp_path,
+            agents={
+                "env_agent": AgentConfig(
+                    name="env_agent",
+                    type="command",
+                    command="printenv NOTE_WATCHER_VAULT_PATH",
+                ),
+            },
+        )
+        dispatcher = AgentDispatcher(config)
+        instruction = _make_instruction("env_agent")
+        result = dispatcher.dispatch(instruction, file_path="/tmp/notes/test.md")
+        assert result == str(tmp_path)
+
+    def test_command_receives_system_prompt_env(self, tmp_path) -> None:
+        """Command agent receives NOTE_WATCHER_SYSTEM_PROMPT env var."""
+        config = Config(
+            vault=tmp_path,
+            agents={
+                "env_agent": AgentConfig(
+                    name="env_agent",
+                    type="command",
+                    command="printenv NOTE_WATCHER_SYSTEM_PROMPT",
+                    system_prompt="You are helpful.",
+                ),
+            },
+        )
+        dispatcher = AgentDispatcher(config)
+        instruction = _make_instruction("env_agent")
+        result = dispatcher.dispatch(instruction, file_path="/tmp/notes/test.md")
+        assert result == "You are helpful."
+
+    def test_system_prompt_interpolates_vault_path(self, tmp_path) -> None:
+        """System prompt template variables are interpolated."""
+        config = Config(
+            vault=tmp_path,
+            agents={
+                "env_agent": AgentConfig(
+                    name="env_agent",
+                    type="command",
+                    command="printenv NOTE_WATCHER_SYSTEM_PROMPT",
+                    system_prompt="Vault: {vault_path}",
+                ),
+            },
+        )
+        dispatcher = AgentDispatcher(config)
+        instruction = _make_instruction("env_agent")
+        result = dispatcher.dispatch(instruction, file_path="/tmp/notes/test.md")
+        assert result == f"Vault: {tmp_path}"
+
+    def test_system_prompt_interpolates_file_path(self, tmp_path) -> None:
+        config = Config(
+            vault=tmp_path,
+            agents={
+                "env_agent": AgentConfig(
+                    name="env_agent",
+                    type="command",
+                    command="printenv NOTE_WATCHER_SYSTEM_PROMPT",
+                    system_prompt="File: {file_path}",
+                ),
+            },
+        )
+        dispatcher = AgentDispatcher(config)
+        instruction = _make_instruction("env_agent")
+        result = dispatcher.dispatch(instruction, file_path="/tmp/notes/test.md")
+        assert result == "File: /tmp/notes/test.md"
+
+    def test_system_prompt_file_loaded(self, tmp_path) -> None:
+        """System prompt loaded from file relative to config_dir."""
+        prompt_file = tmp_path / "prompts" / "test.md"
+        prompt_file.parent.mkdir(parents=True)
+        prompt_file.write_text("Prompt from file: {vault_path}")
+
+        config = Config(
+            vault=tmp_path,
+            config_dir=tmp_path,
+            agents={
+                "env_agent": AgentConfig(
+                    name="env_agent",
+                    type="command",
+                    command="printenv NOTE_WATCHER_SYSTEM_PROMPT",
+                    system_prompt_file="prompts/test.md",
+                ),
+            },
+        )
+        dispatcher = AgentDispatcher(config)
+        instruction = _make_instruction("env_agent")
+        result = dispatcher.dispatch(instruction, file_path="/tmp/notes/test.md")
+        assert result == f"Prompt from file: {tmp_path}"
+
+    def test_system_prompt_with_curly_braces_not_crashed(self, tmp_path) -> None:
+        """System prompt containing curly braces (e.g. JSON) should not crash."""
+        config = Config(
+            vault=tmp_path,
+            agents={
+                "env_agent": AgentConfig(
+                    name="env_agent",
+                    type="command",
+                    command="printenv NOTE_WATCHER_SYSTEM_PROMPT",
+                    system_prompt='Use JSON like {"key": "value"} in responses.',
+                ),
+            },
+        )
+        dispatcher = AgentDispatcher(config)
+        instruction = _make_instruction("env_agent")
+        result = dispatcher.dispatch(instruction, file_path="/tmp/notes/test.md")
+        assert result == 'Use JSON like {"key": "value"} in responses.'
+
+    def test_no_system_prompt_env_when_not_configured(self, tmp_path) -> None:
+        """No NOTE_WATCHER_SYSTEM_PROMPT env var when system_prompt not set."""
+        # Use a command that prints all env vars as JSON so we can check absence
+        config = Config(
+            vault=tmp_path,
+            agents={
+                "env_agent": AgentConfig(
+                    name="env_agent",
+                    type="command",
+                    command=(
+                        "python3 -c \"import os, json;"
+                        " print(json.dumps(dict(os.environ)))\""
+                    ),
+                ),
+            },
+        )
+        dispatcher = AgentDispatcher(config)
+        instruction = _make_instruction("env_agent")
+        result = dispatcher.dispatch(instruction, file_path="/tmp/notes/test.md")
+        env = json.loads(result)
+        assert "NOTE_WATCHER_SYSTEM_PROMPT" not in env
+        assert env["NOTE_WATCHER_FILE_PATH"] == "/tmp/notes/test.md"

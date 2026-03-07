@@ -32,6 +32,8 @@ class AgentConfig:
     type: str
     command: str | None = None
     callable: str | None = None
+    system_prompt: str | None = None
+    system_prompt_file: str | None = None
 
     @classmethod
     def from_dict(cls, name: str, data: dict[str, Any]) -> AgentConfig:
@@ -44,11 +46,20 @@ class AgentConfig:
         Returns:
             A new AgentConfig instance.
         """
+        system_prompt = data.get("system_prompt")
+        system_prompt_file = data.get("system_prompt_file")
+        if system_prompt and system_prompt_file:
+            raise ValueError(
+                f"Cannot set both 'system_prompt' and "
+                f"'system_prompt_file' for agent {name!r}"
+            )
         return cls(
             name=name,
             type=data.get("type", "echo"),
             command=data.get("command"),
             callable=data.get("callable"),
+            system_prompt=system_prompt,
+            system_prompt_file=system_prompt_file,
         )
 
 
@@ -60,6 +71,7 @@ class Config:
     debounce_seconds: float = DEFAULT_DEBOUNCE_SECONDS
     ignore_patterns: list[str] = field(default_factory=lambda: list(DEFAULT_IGNORE_PATTERNS))
     agents: dict[str, AgentConfig] = field(default_factory=dict)
+    config_dir: Path | None = None
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> Config:
@@ -116,4 +128,6 @@ def load_config(config_path: str | Path | None = None) -> Config:
     if data is None:
         return Config.defaults()
 
-    return Config.from_dict(data)
+    config = Config.from_dict(data)
+    config.config_dir = path.parent
+    return config

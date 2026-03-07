@@ -83,6 +83,41 @@ class TestAgentConfig:
         assert agent.type == "command"
         assert agent.command == "echo hello"
 
+    def test_from_dict_with_system_prompt(self) -> None:
+        agent = AgentConfig.from_dict(
+            "claude",
+            {
+                "type": "command",
+                "command": "claude --print",
+                "system_prompt": "You are helpful.",
+            },
+        )
+        assert agent.system_prompt == "You are helpful."
+        assert agent.system_prompt_file is None
+
+    def test_from_dict_with_system_prompt_file(self) -> None:
+        agent = AgentConfig.from_dict(
+            "claude",
+            {
+                "type": "command",
+                "command": "claude --print",
+                "system_prompt_file": "prompts/claude.md",
+            },
+        )
+        assert agent.system_prompt is None
+        assert agent.system_prompt_file == "prompts/claude.md"
+
+    def test_from_dict_both_system_prompt_fields_raises(self) -> None:
+        with pytest.raises(ValueError, match="Cannot set both"):
+            AgentConfig.from_dict(
+                "claude",
+                {
+                    "type": "command",
+                    "system_prompt": "inline",
+                    "system_prompt_file": "file.md",
+                },
+            )
+
 
 class TestLoadConfig:
     """Tests for load_config()."""
