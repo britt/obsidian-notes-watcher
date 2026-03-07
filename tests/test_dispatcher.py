@@ -80,7 +80,7 @@ class TestAgentDispatcher:
         dispatcher = AgentDispatcher(config)
         instruction = _make_instruction("cat_agent", "hello from command")
         result = dispatcher.dispatch(instruction)
-        assert result == "hello from command"
+        assert "hello from command" in result
 
     def test_unsupported_agent_type_raises(self, tmp_path) -> None:
         """An agent with an unrecognized type should raise."""
@@ -149,7 +149,8 @@ class TestCommandAgentEnvVars:
         dispatcher = AgentDispatcher(config)
         instruction = _make_instruction("env_agent")
         result = dispatcher.dispatch(instruction, file_path="/tmp/notes/test.md")
-        assert result == "You are helpful."
+        assert "You are helpful." in result
+        assert "file path" in result.lower()
 
     def test_system_prompt_interpolates_vault_path(self, tmp_path) -> None:
         """System prompt template variables are interpolated."""
@@ -167,7 +168,7 @@ class TestCommandAgentEnvVars:
         dispatcher = AgentDispatcher(config)
         instruction = _make_instruction("env_agent")
         result = dispatcher.dispatch(instruction, file_path="/tmp/notes/test.md")
-        assert result == f"Vault: {tmp_path}"
+        assert f"Vault: {tmp_path}" in result
 
     def test_system_prompt_interpolates_file_path(self, tmp_path) -> None:
         config = Config(
@@ -184,7 +185,7 @@ class TestCommandAgentEnvVars:
         dispatcher = AgentDispatcher(config)
         instruction = _make_instruction("env_agent")
         result = dispatcher.dispatch(instruction, file_path="/tmp/notes/test.md")
-        assert result == "File: /tmp/notes/test.md"
+        assert "File: /tmp/notes/test.md" in result
 
     def test_system_prompt_file_loaded(self, tmp_path) -> None:
         """System prompt loaded from file relative to config_dir."""
@@ -207,7 +208,7 @@ class TestCommandAgentEnvVars:
         dispatcher = AgentDispatcher(config)
         instruction = _make_instruction("env_agent")
         result = dispatcher.dispatch(instruction, file_path="/tmp/notes/test.md")
-        assert result == f"Prompt from file: {tmp_path}"
+        assert f"Prompt from file: {tmp_path}" in result
 
     def test_system_prompt_with_curly_braces_not_crashed(self, tmp_path) -> None:
         """System prompt containing curly braces (e.g. JSON) should not crash."""
@@ -225,7 +226,66 @@ class TestCommandAgentEnvVars:
         dispatcher = AgentDispatcher(config)
         instruction = _make_instruction("env_agent")
         result = dispatcher.dispatch(instruction, file_path="/tmp/notes/test.md")
-        assert result == 'Use JSON like {"key": "value"} in responses.'
+        assert 'Use JSON like {"key": "value"} in responses.' in result
+
+    def test_command_stdin_includes_file_path(self, tmp_path) -> None:
+        """Command agent receives file path as part of stdin message."""
+        config = Config(
+            vault=tmp_path,
+            agents={
+                "cat_agent": AgentConfig(
+                    name="cat_agent",
+                    type="command",
+                    command="cat",
+                ),
+            },
+        )
+        dispatcher = AgentDispatcher(config)
+        instruction = _make_instruction("cat_agent", "do something")
+        result = dispatcher.dispatch(
+            instruction, file_path="/tmp/notes/test.md"
+        )
+        assert "File: /tmp/notes/test.md" in result
+        assert "do something" in result
+
+    def test_command_stdin_file_path_before_instruction(self, tmp_path) -> None:
+        """File path appears before instruction text in stdin."""
+        config = Config(
+            vault=tmp_path,
+            agents={
+                "cat_agent": AgentConfig(
+                    name="cat_agent",
+                    type="command",
+                    command="cat",
+                ),
+            },
+        )
+        dispatcher = AgentDispatcher(config)
+        instruction = _make_instruction("cat_agent", "fix the typos")
+        result = dispatcher.dispatch(
+            instruction, file_path="/vault/note.md"
+        )
+        file_pos = result.index("File: /vault/note.md")
+        instruction_pos = result.index("fix the typos")
+        assert file_pos < instruction_pos
+
+    def test_system_prompt_mentions_file_path_in_message(self, tmp_path) -> None:
+        """System prompt should indicate the user message contains the file path."""
+        config = Config(
+            vault=tmp_path,
+            agents={
+                "env_agent": AgentConfig(
+                    name="env_agent",
+                    type="command",
+                    command="printenv NOTE_WATCHER_SYSTEM_PROMPT",
+                    system_prompt="You are helpful.",
+                ),
+            },
+        )
+        dispatcher = AgentDispatcher(config)
+        instruction = _make_instruction("env_agent")
+        result = dispatcher.dispatch(instruction, file_path="/tmp/notes/test.md")
+        assert "file path" in result.lower()
 
     def test_no_system_prompt_env_when_not_configured(self, tmp_path) -> None:
         """No NOTE_WATCHER_SYSTEM_PROMPT env var when system_prompt not set."""

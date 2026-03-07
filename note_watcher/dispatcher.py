@@ -100,6 +100,10 @@ class AgentDispatcher:
         if prompt is not None:
             prompt = prompt.replace("{vault_path}", str(self.config.vault))
             prompt = prompt.replace("{file_path}", file_path)
+            prompt += (
+                "\n\nThe user's message will begin with the file path of the"
+                " note being processed."
+            )
         return prompt
 
     def _handle_command(
@@ -125,9 +129,11 @@ class AgentDispatcher:
         if system_prompt is not None:
             env["NOTE_WATCHER_SYSTEM_PROMPT"] = system_prompt
 
+        stdin_message = f"File: {file_path}\n\n{instruction.instruction_text}"
+
         result = subprocess.run(
             agent_config.command,
-            input=instruction.instruction_text,
+            input=stdin_message,
             capture_output=True,
             text=True,
             shell=True,
