@@ -31,6 +31,34 @@ When you push changes to `.md` files, the workflow:
 | `commit` | `true` | Whether to commit and push results automatically |
 | `commit-message` | `Process note instructions [skip ci]` | Commit message to use |
 
+## System prompts
+
+You can give your agent a system prompt to control its behavior. Define it inline in `config.yml` or load it from a file:
+
+```yaml
+agents:
+  claude:
+    type: command
+    command: "claude --print --system-prompt \"$NOTE_WATCHER_SYSTEM_PROMPT\""
+    system_prompt: |
+      You are working in an Obsidian vault at {vault_path}.
+      The user has left an instruction in the note at {file_path}.
+      Read the note, then modify it as requested.
+      Respond with a brief summary of what you did.
+```
+
+Or load from a file (path relative to the config file):
+
+```yaml
+agents:
+  claude:
+    type: command
+    command: "claude --print --system-prompt \"$NOTE_WATCHER_SYSTEM_PROMPT\""
+    system_prompt_file: prompts/claude.md
+```
+
+The `{vault_path}` and `{file_path}` template variables are replaced at dispatch time. The resolved prompt is set as the `NOTE_WATCHER_SYSTEM_PROMPT` environment variable. See the [system prompts section](../../README.md#system-prompts) in the main README for full details.
+
 ## Example
 
 Write `@claude` instructions in your notes:

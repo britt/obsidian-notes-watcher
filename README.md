@@ -83,6 +83,45 @@ agents:
 | `uppercase` | Returns the instruction text in uppercase |
 | `command` | Runs a shell command with instruction text on stdin, returns stdout |
 
+### System prompts
+
+Command agents support an optional system prompt that provides context to the agent. You can define it inline or load it from a file:
+
+```yaml
+agents:
+  claude:
+    type: command
+    command: "claude --print"
+    # Inline system prompt
+    system_prompt: |
+      You are working in an Obsidian vault at {vault_path}.
+      The user has left an instruction in the note at {file_path}.
+      Read the note, then modify it as requested.
+
+  claude-from-file:
+    type: command
+    command: "claude --print"
+    # Load from a file (path relative to the config file's directory)
+    system_prompt_file: prompts/claude.md
+```
+
+System prompts support two template variables that are interpolated at dispatch time:
+
+| Variable | Value |
+|----------|-------|
+| `{vault_path}` | Absolute path to the Obsidian vault |
+| `{file_path}` | Path to the note containing the `@` instruction |
+
+The resolved prompt is passed to the command via the `NOTE_WATCHER_SYSTEM_PROMPT` environment variable. Two additional environment variables are always set for command agents:
+
+| Environment variable | Value |
+|----------------------|-------|
+| `NOTE_WATCHER_VAULT_PATH` | Absolute path to the vault |
+| `NOTE_WATCHER_FILE_PATH` | Path to the note being processed |
+| `NOTE_WATCHER_SYSTEM_PROMPT` | Resolved system prompt (only if configured) |
+
+You cannot set both `system_prompt` and `system_prompt_file` on the same agent — Note Watcher will raise an error if you do.
+
 ### Example: Using Claude Code as an agent
 
 Configure a `command` agent that dispatches instructions to [Claude Code](https://docs.anthropic.com/en/docs/claude-code):
@@ -91,7 +130,13 @@ Configure a `command` agent that dispatches instructions to [Claude Code](https:
 agents:
   claude:
     type: command
-    command: "claude -p"   # Dispatches instruction to Claude Code CLI
+    command: "claude --print --system-prompt \"$NOTE_WATCHER_SYSTEM_PROMPT\""
+    system_prompt: |
+      You are working in an Obsidian vault at {vault_path}.
+      The user has left an instruction in the note at {file_path}.
+      Read the note, then modify it as requested by the instruction.
+      After making your changes, commit them to git.
+      Respond with a brief summary of what you did.
 ```
 
 Claude Code runs with full access to your vault, so it can edit notes, create new files, and reorganize content — not just respond in a comment. Write `@claude` instructions in your notes:
