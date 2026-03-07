@@ -287,9 +287,32 @@ class TestCommandAgentEnvVars:
         result = dispatcher.dispatch(instruction, file_path="/tmp/notes/test.md")
         assert "file path" in result.lower()
 
-    def test_no_system_prompt_env_when_not_configured(self, tmp_path) -> None:
-        """No NOTE_WATCHER_SYSTEM_PROMPT env var when system_prompt not set."""
-        # Use a command that prints all env vars as JSON so we can check absence
+    def test_default_system_prompt_when_not_configured(
+        self, tmp_path
+    ) -> None:
+        """Default system prompt is used when none is configured."""
+        config = Config(
+            vault=tmp_path,
+            agents={
+                "env_agent": AgentConfig(
+                    name="env_agent",
+                    type="command",
+                    command="printenv NOTE_WATCHER_SYSTEM_PROMPT",
+                ),
+            },
+        )
+        dispatcher = AgentDispatcher(config)
+        instruction = _make_instruction("env_agent")
+        result = dispatcher.dispatch(
+            instruction, file_path="/tmp/notes/test.md"
+        )
+        # Should contain key phrases from the default prompt
+        assert "Obsidian vault" in result
+        assert str(tmp_path) in result
+        assert "/tmp/notes/test.md" in result
+
+    def test_default_prompt_env_always_set(self, tmp_path) -> None:
+        """NOTE_WATCHER_SYSTEM_PROMPT env var is always set."""
         config = Config(
             vault=tmp_path,
             agents={
@@ -305,7 +328,31 @@ class TestCommandAgentEnvVars:
         )
         dispatcher = AgentDispatcher(config)
         instruction = _make_instruction("env_agent")
-        result = dispatcher.dispatch(instruction, file_path="/tmp/notes/test.md")
+        result = dispatcher.dispatch(
+            instruction, file_path="/tmp/notes/test.md"
+        )
         env = json.loads(result)
-        assert "NOTE_WATCHER_SYSTEM_PROMPT" not in env
+        assert "NOTE_WATCHER_SYSTEM_PROMPT" in env
         assert env["NOTE_WATCHER_FILE_PATH"] == "/tmp/notes/test.md"
+
+    def test_custom_prompt_overrides_default(self, tmp_path) -> None:
+        """Custom system_prompt replaces the default, not appends."""
+        config = Config(
+            vault=tmp_path,
+            agents={
+                "env_agent": AgentConfig(
+                    name="env_agent",
+                    type="command",
+                    command="printenv NOTE_WATCHER_SYSTEM_PROMPT",
+                    system_prompt="Custom prompt only.",
+                ),
+            },
+        )
+        dispatcher = AgentDispatcher(config)
+        instruction = _make_instruction("env_agent")
+        result = dispatcher.dispatch(
+            instruction, file_path="/tmp/notes/test.md"
+        )
+        assert "Custom prompt only." in result
+        # Should NOT contain the default prompt text
+        assert "Obsidian vault at" not in result

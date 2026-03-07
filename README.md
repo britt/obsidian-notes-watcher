@@ -112,13 +112,13 @@ System prompts support two template variables that are interpolated at dispatch 
 | `{vault_path}` | Absolute path to the Obsidian vault |
 | `{file_path}` | Path to the note containing the `@` instruction |
 
-The resolved prompt is passed to the command via the `NOTE_WATCHER_SYSTEM_PROMPT` environment variable. Two additional environment variables are always set for command agents:
+The resolved prompt is passed to the command via the `NOTE_WATCHER_SYSTEM_PROMPT` environment variable. If no system prompt is configured, a sensible default is used. The following environment variables are always set for command agents:
 
 | Environment variable | Value |
 |----------------------|-------|
 | `NOTE_WATCHER_VAULT_PATH` | Absolute path to the vault |
 | `NOTE_WATCHER_FILE_PATH` | Path to the note being processed |
-| `NOTE_WATCHER_SYSTEM_PROMPT` | Resolved system prompt (only if configured) |
+| `NOTE_WATCHER_SYSTEM_PROMPT` | Resolved system prompt (default or custom) |
 
 You cannot set both `system_prompt` and `system_prompt_file` on the same agent — Note Watcher will raise an error if you do.
 
