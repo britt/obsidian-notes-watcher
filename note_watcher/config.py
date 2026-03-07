@@ -35,6 +35,15 @@ class AgentConfig:
 
     @classmethod
     def from_dict(cls, name: str, data: dict[str, Any]) -> AgentConfig:
+        """Create an AgentConfig from a parsed YAML dictionary.
+
+        Args:
+            name: The agent's identifier.
+            data: Dictionary of agent settings from the config file.
+
+        Returns:
+            A new AgentConfig instance.
+        """
         return cls(
             name=name,
             type=data.get("type", "echo"),
