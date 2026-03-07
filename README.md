@@ -167,7 +167,8 @@ To set it up:
 1. Copy `examples/github-action/.github/` into your notes repository
 2. Add a `config.yml` to your notes repo (see `examples/github-action/config.example.yml`)
 3. Add your `ANTHROPIC_API_KEY` as a repository secret
-4. Under **Settings > Actions > General**, set "Workflow permissions" to "Read and write permissions"
+
+The example workflow already includes `permissions: contents: write`, which is required for the action to push processed results back to your repository. If you write your own workflow, make sure to include this permission block.
 
 The workflow triggers on any push that modifies `.md` files, processes all unprocessed `@` instructions, and commits the agent's changes back to your repository. It uses `[skip ci]` to prevent infinite loops.
 
