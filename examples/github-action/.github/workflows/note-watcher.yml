@@ -3,6 +3,8 @@ on:
   push:
     paths:
       - '**.md'
+permissions:
+  contents: write
 jobs:
   process:
     runs-on: ubuntu-latest
