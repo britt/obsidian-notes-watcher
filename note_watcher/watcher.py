@@ -110,7 +110,7 @@ def process_file(file_path: str, dispatcher: AgentDispatcher) -> int:
                 instruction.agent_name,
                 instruction.instruction_text[:50],
             )
-            result = dispatcher.dispatch(instruction)
+            result = dispatcher.dispatch(instruction, file_path=file_path)
             write_result(file_path, instruction, result)
             processed += 1
             logger.info("Wrote result for @%s", instruction.agent_name)
@@ -166,7 +166,7 @@ def process_file_reparse(file_path: str, dispatcher: AgentDispatcher) -> int:
                 instruction.agent_name,
                 instruction.instruction_text[:50],
             )
-            result = dispatcher.dispatch(instruction)
+            result = dispatcher.dispatch(instruction, file_path=file_path)
             write_result(file_path, instruction, result)
             processed += 1
             logger.info("Wrote result for @%s", instruction.agent_name)

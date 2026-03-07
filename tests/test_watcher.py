@@ -147,3 +147,18 @@ class TestProcessFileReparse:
 
         count = process_file_reparse(str(note), dispatcher)
         assert count == 0
+
+    def test_passes_file_path_to_dispatcher(
+        self, tmp_path: Path, dispatcher: AgentDispatcher
+    ) -> None:
+        """process_file_reparse passes the file path to dispatch()."""
+        note = tmp_path / "note.md"
+        note.write_text("@echo test\n")
+
+        with patch.object(
+            dispatcher, "dispatch", wraps=dispatcher.dispatch
+        ) as mock_dispatch:
+            process_file_reparse(str(note), dispatcher)
+            mock_dispatch.assert_called_once()
+            _, kwargs = mock_dispatch.call_args
+            assert kwargs.get("file_path") == str(note)
