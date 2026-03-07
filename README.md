@@ -160,47 +160,18 @@ note-watcher process --all --vault /path/to/vault
 
 ### Setting up the GitHub Actions workflow
 
-Add the following workflow to your repository at `.github/workflows/note-watcher.yml`. This example uses [Claude Code](https://docs.anthropic.com/en/docs/claude-code) as the AI agent:
+See [`examples/github-action/`](examples/github-action/) for a complete, ready-to-copy example that uses [Claude Code](https://docs.anthropic.com/en/docs/claude-code) as the AI agent.
 
-```yaml
-name: Note Watcher
-on:
-  push:
-    paths:
-      - '**.md'
-jobs:
-  process:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-      - uses: anthropics/anthropic-cookbook/.github/actions/claude-code@main
-        with:
-          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-      - run: pip install .
-      - run: note-watcher process --all --vault .
-      - name: Commit results
-        run: |
-          git config user.name 'Note Watcher Bot'
-          git config user.email 'note-watcher@users.noreply.github.com'
-          git add -A
-          git diff --staged --quiet || git commit -m "Process note instructions [skip ci]"
-          git push
-```
+To set it up:
 
-This workflow:
+1. Copy `examples/github-action/.github/` into your notes repository
+2. Add a `config.yml` to your notes repo (see `examples/github-action/config.example.yml`)
+3. Add your `ANTHROPIC_API_KEY` as a repository secret
+4. Under **Settings > Actions > General**, set "Workflow permissions" to "Read and write permissions"
 
-- Triggers on any push that modifies `.md` files
-- Sets up Claude Code via the [Claude Code GitHub Action](https://docs.anthropic.com/en/docs/claude-code/github-actions) for AI-powered processing
-- Installs Note Watcher and processes all unprocessed instructions
-- Commits the results back to the repository using a bot identity
-- Uses `[skip ci]` in the commit message to prevent infinite workflow loops
+The workflow triggers on any push that modifies `.md` files, processes all unprocessed `@` instructions, and commits the results back. It uses `[skip ci]` to prevent infinite loops.
 
-> **Tip:** For AI-powered processing, configure a Claude Code agent (e.g., `command: "claude -p"`). See the [Claude Code GitHub Actions documentation](https://docs.anthropic.com/en/docs/claude-code/github-actions) for setup details.
-
-**Note:** The repository's default `GITHUB_TOKEN` must have write permissions for the commit step to succeed. Under **Settings > Actions > General**, set "Workflow permissions" to "Read and write permissions".
+See the [Claude Code GitHub Actions documentation](https://docs.anthropic.com/en/docs/claude-code/github-actions) for more on setting up Claude Code in CI.
 
 ## Running Tests
 

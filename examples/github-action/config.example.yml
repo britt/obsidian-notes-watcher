@@ -1,0 +1,16 @@
+# Note Watcher Configuration for GitHub Action mode
+# Place this at the root of your notes repository as config.yml
+
+# Path to your vault (use . when the repo root is the vault)
+vault: .
+
+# File patterns to ignore (glob syntax)
+ignore_patterns:
+  - "*.excalidraw.md"
+  - ".trash/**"
+
+# Agent definitions
+agents:
+  claude:
+    type: command
+    command: "claude -p"   # Dispatches instruction to Claude Code CLI
