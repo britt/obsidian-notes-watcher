@@ -20,6 +20,8 @@ DEFAULT_SYSTEM_PROMPT = """\
 You are working in an Obsidian vault at {vault_path}.
 The user has left an instruction in the note at {file_path}.
 Read the note, then modify it as requested by the instruction.
+If the user asks for changes to a note without specifying which one, \
+apply the changes to the same note that contains the instruction.
 After making your changes, commit them to git.
 Respond with a brief summary of what you did."""
 
