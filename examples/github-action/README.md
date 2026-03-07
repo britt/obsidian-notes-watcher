@@ -15,8 +15,10 @@ When you push changes to `.md` files, the workflow:
 
 1. Checks out your repository
 2. Sets up Claude Code (only needed for the Claude agent in this example)
-3. Runs the `britt/obsidian-note-watcher` action, which installs Note Watcher, processes all unprocessed `@` instructions, and commits the results back
-4. Uses `[skip ci]` to prevent infinite workflow loops
+3. Runs the `britt/obsidian-note-watcher` action, which installs Note Watcher and processes all unprocessed `@` instructions
+4. The agent (e.g. Claude Code) can read, edit, create, and reorganize notes across your vault — not just reply in a comment
+5. All changes are committed and pushed back to your repository
+6. Uses `[skip ci]` to prevent infinite workflow loops
 
 ## Action inputs
 
@@ -34,13 +36,15 @@ When you push changes to `.md` files, the workflow:
 Write `@claude` instructions in your notes:
 
 ```markdown
-@claude Summarize the key points of this meeting
+@claude Summarize the key points of this meeting and add action items to my Tasks note
 ```
 
-After the workflow runs, it becomes:
+After the workflow runs, Claude Code edits your vault (creating or updating notes as needed), and the original instruction is replaced with a completion marker:
 
 ```markdown
-<!-- @done claude: Summarize the key points of this meeting
-The key points of this meeting are...
+<!-- @done claude: Summarize the key points of this meeting and add action items to my Tasks note
+Added summary and extracted 3 action items to Tasks.md.
 /@done -->
 ```
+
+The completion comment is just a record — the real work is in the commit, where the agent's changes to your notes are pushed back to the repository.

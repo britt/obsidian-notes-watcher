@@ -1,16 +1,16 @@
 # Note Watcher
 
-A daemon that detects `@` mentions in Obsidian markdown notes, dispatches instructions to configured agents, and writes results back as HTML comments.
+A tool that detects `@` mentions in Obsidian markdown notes stored in Git and dispatches instructions to configured agents — like [Claude Code](https://docs.anthropic.com/en/docs/claude-code) — that can read, modify, and reorganize your notes directly.
 
-Write `@agent_name do something` in any note, and Note Watcher replaces it with the agent's output wrapped in a single HTML comment (invisible in rendered markdown):
+Write `@agent_name do something` in any note, and Note Watcher dispatches the instruction to the named agent. The agent can edit files, create new notes, restructure content, or make any other changes to your vault. The original instruction is then replaced with a completion marker (an HTML comment, invisible in rendered markdown) so it is never reprocessed:
 
 ```markdown
 <!-- @done agent_name: do something
-Agent output goes here.
+Agent response summary goes here.
 /@done -->
 ```
 
-Processed instructions are wrapped in `<!-- @done ... /@done -->` comment blocks so they are never reprocessed and stay hidden when the note is rendered.
+The real work happens in the commit: the agent's changes to your vault are committed back to Git. The completion comment is just a record that the instruction was processed.
 
 ## Modes of Operation
 
@@ -94,10 +94,10 @@ agents:
     command: "claude -p"   # Dispatches instruction to Claude Code CLI
 ```
 
-Then write `@claude` instructions in your notes:
+Claude Code runs with full access to your vault, so it can edit notes, create new files, and reorganize content — not just respond in a comment. Write `@claude` instructions in your notes:
 
 ```markdown
-@claude Summarize the key points of this meeting
+@claude Summarize the key points of this meeting and add action items to my Tasks note
 ```
 
 ## Daemon Mode
@@ -169,7 +169,7 @@ To set it up:
 3. Add your `ANTHROPIC_API_KEY` as a repository secret
 4. Under **Settings > Actions > General**, set "Workflow permissions" to "Read and write permissions"
 
-The workflow triggers on any push that modifies `.md` files, processes all unprocessed `@` instructions, and commits the results back. It uses `[skip ci]` to prevent infinite loops.
+The workflow triggers on any push that modifies `.md` files, processes all unprocessed `@` instructions, and commits the agent's changes back to your repository. It uses `[skip ci]` to prevent infinite loops.
 
 See the [Claude Code GitHub Actions documentation](https://docs.anthropic.com/en/docs/claude-code/github-actions) for more on setting up Claude Code in CI.
 
