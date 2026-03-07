@@ -2,7 +2,7 @@
 
 from pathlib import Path as _Path
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 # Use README.md as the module docstring so pdoc shows it on the index page.
 _readme = _Path(__file__).parent.parent / "README.md"
