@@ -60,7 +60,7 @@ detect_executable() {
     fi
 
     if [ -n "$pip_cmd" ]; then
-        pip_location="$($pip_cmd show note-watcher 2>/dev/null | sed -n 's/^Location: //p')"
+        pip_location="$($pip_cmd show notes-watcher 2>/dev/null | sed -n 's/^Location: //p')"
         if [ -n "$pip_location" ]; then
             pip_bin="$(dirname "$pip_location")/bin/note-watcher"
             if [ -x "$pip_bin" ]; then
@@ -91,7 +91,7 @@ fi
 info "Detecting note-watcher executable..."
 NOTE_WATCHER_PATH="$(detect_executable)" || die \
     "Could not find note-watcher executable. Please install it first:
-    pip install note-watcher
+    pip install notes-watcher
   or:
     pip install -e ."
 
