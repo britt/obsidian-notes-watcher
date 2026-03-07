@@ -26,7 +26,7 @@ The real work happens in the commit: the agent's changes to your vault are commi
 ## Installation
 
 ```bash
-pip install .
+pip install notes-watcher
 ```
 
 For development:
