@@ -8,6 +8,10 @@ vault: .
 ignore_patterns:
   - "*.excalidraw.md"
   - ".trash/**"
+  - ".obsidian/**"
+  - ".claude/**"
+  - ".git/**"
+  - ".github/**"
 
 # Agent definitions
 agents:

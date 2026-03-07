@@ -12,6 +12,10 @@ debounce_seconds: 1.0
 ignore_patterns:
   - "*.excalidraw.md"
   - ".trash/**"
+  - ".obsidian/**"
+  - ".claude/**"
+  - ".git/**"
+  - ".github/**"
 
 # Agent definitions
 agents:
