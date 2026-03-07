@@ -34,6 +34,7 @@ class AgentConfig:
     callable: str | None = None
     system_prompt: str | None = None
     system_prompt_file: str | None = None
+    timeout: int = 900
 
     @classmethod
     def from_dict(cls, name: str, data: dict[str, Any]) -> AgentConfig:
@@ -60,6 +61,7 @@ class AgentConfig:
             callable=data.get("callable"),
             system_prompt=system_prompt,
             system_prompt_file=system_prompt_file,
+            timeout=int(data.get("timeout", 900)),
         )
 
 
