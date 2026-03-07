@@ -33,6 +33,8 @@ Repository = "https://github.com/britt/obsidian-notes-watcher"
 dev = [
     "pytest>=7.0",
     "pytest-cov>=4.0",
+    "pdoc>=14.0",
+    "ruff>=0.4.0",
 ]
 
 [project.scripts]
@@ -40,6 +42,16 @@ note-watcher = "note_watcher.cli:main"
 
 [tool.setuptools.packages.find]
 include = ["note_watcher*"]
+
+[tool.pdoc]
+output_directory = "docs"
+
+[tool.ruff]
+target-version = "py310"
+line-length = 88
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W", "UP"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -18,6 +18,11 @@ class UnknownAgentError(Exception):
     """Raised when an instruction references an agent that isn't configured."""
 
     def __init__(self, agent_name: str) -> None:
+        """Initialize with the name of the unrecognized agent.
+
+        Args:
+            agent_name: The agent name that was not found in configuration.
+        """
         self.agent_name = agent_name
         super().__init__(f"Unknown agent: {agent_name!r}")
 
@@ -26,6 +31,11 @@ class AgentDispatcher:
     """Routes instructions to the appropriate agent handler."""
 
     def __init__(self, config: Config) -> None:
+        """Initialize the dispatcher with application configuration.
+
+        Args:
+            config: Application configuration containing agent definitions.
+        """
         self.config = config
 
     def dispatch(self, instruction: Instruction) -> str:

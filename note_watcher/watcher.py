@@ -32,11 +32,25 @@ class NoteEventHandler(FileSystemEventHandler):
     """Handles file system events for .md files in the vault."""
 
     def __init__(self, debouncer: Debouncer, ignore_patterns: list[str]) -> None:
+        """Initialize the event handler.
+
+        Args:
+            debouncer: Debouncer instance to throttle rapid file changes.
+            ignore_patterns: Glob patterns for files to skip.
+        """
         super().__init__()
         self.debouncer = debouncer
         self.ignore_patterns = ignore_patterns
 
     def on_modified(self, event: FileModifiedEvent) -> None:  # type: ignore[override]
+        """Handle a file modification event.
+
+        Filters for .md files not matching ignore patterns, then triggers
+        the debouncer for further processing.
+
+        Args:
+            event: The file system event from watchdog.
+        """
         if event.is_directory:
             return
 

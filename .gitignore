@@ -6,3 +6,5 @@ build/
 .eggs/
 *.whl
 *.tar.gz
+.venv/
+docs/
