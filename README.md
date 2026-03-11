@@ -337,6 +337,74 @@ Claude Code will then have access to all the tools in your gateway when processi
 @claude Post a message in the #notes channel on Slack saying the weekly review is ready
 ```
 
+## Installing Skills for Claude Code
+
+[Skills](https://docs.anthropic.com/en/docs/claude-code/skills) are markdown files that teach Claude Code reusable behaviors — how to format notes, apply templates, follow your conventions, etc. Skills are checked into your notes repository, so they work automatically in both daemon mode and the GitHub Action.
+
+### Writing your own skills
+
+Create a `SKILL.md` file inside a named directory under `.claude/skills/`:
+
+```
+your-notes-repo/
+├── .claude/
+│   └── skills/
+│       ├── organize-notes/
+│       │   └── SKILL.md
+│       └── daily-journal/
+│           ├── SKILL.md
+│           └── templates/
+│               └── journal-entry.md
+├── Notes/
+│   └── ...
+└── config.yml
+```
+
+Each `SKILL.md` has YAML frontmatter and markdown instructions:
+
+```markdown
+---
+name: organize-notes
+description: Organize notes into folders by topic and add backlinks
+---
+
+When asked to organize notes:
+1. Group related notes into topic folders
+2. Add `[[backlinks]]` between related notes
+3. Update any broken links after moving files
+```
+
+Claude Code automatically discovers skills in `.claude/skills/` and uses them when relevant. You can also reference one explicitly:
+
+```markdown
+@claude Use the daily-journal skill to format today's standup notes
+```
+
+### Installing plugins from a marketplace
+
+You can install community-contributed plugins from a [plugin marketplace](https://docs.anthropic.com/en/docs/claude-code/plugins) instead of writing skills by hand. Run these commands locally from your notes repository:
+
+```bash
+# Install from the official Anthropic marketplace into the project
+claude plugin install plugin-name@claude-plugins-official --scope project
+
+# Commit and push so the GitHub Action picks it up
+git add .claude/
+git commit -m "Add plugin-name plugin"
+git push
+```
+
+The `--scope project` flag writes the plugin configuration into the repo's `.claude/` directory. Once committed and pushed, the plugin is available when the GitHub Action runs — no extra workflow steps needed.
+
+To install from a third-party marketplace, add it first:
+
+```bash
+claude plugin marketplace add https://github.com/someone/their-marketplace
+claude plugin install note-helper@their-marketplace --scope project
+```
+
+Then commit and push `.claude/` as above.
+
 ## Running Tests
 
 ```bash
