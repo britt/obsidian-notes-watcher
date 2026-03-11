@@ -24,6 +24,7 @@ dependencies = [
     "watchdog>=3.0",
     "pyyaml>=6.0",
     "click>=8.0",
+    "arcadepy>=1.0",
 ]
 
 [project.urls]
