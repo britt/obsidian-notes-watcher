@@ -231,6 +231,112 @@ The workflow triggers on any push that modifies `.md` files, processes all unpro
 
 See the [Claude Code GitHub Actions documentation](https://docs.anthropic.com/en/docs/claude-code/github-actions) for more on setting up Claude Code in CI.
 
+## Arcade MCP Integration
+
+Note Watcher can use [Arcade](https://arcade.dev) as an MCP gateway to give Claude Code access to external services like Gmail, Google Drive, Google Calendar, Google Sheets, Google Docs, GitHub, and Slack. This lets your `@claude` instructions interact with services beyond the vault — for example, checking email, creating calendar events, or posting to Slack.
+
+Arcade handles OAuth on your behalf: you authorize each service once from your local machine, and Arcade caches the tokens server-side. After that, the GitHub Action runner can use the same tokens without any interactive auth flow.
+
+### Setting up an Arcade MCP gateway
+
+1. Create an [Arcade account](https://api.arcade.dev/dashboard/register) and note your API key
+2. Go to the [MCP Gateways dashboard](https://api.arcade.dev/dashboard/mcp-gateways) and click **Create MCP Gateway**
+3. Configure the gateway:
+   - **Name**: A descriptive name (e.g. "Obsidian Note Watcher")
+   - **Slug**: This becomes your gateway URL path (e.g. `obsidian-notes-watcher` gives you `https://api.arcade.dev/mcp/obsidian-notes-watcher`)
+   - **Authentication Mode**: Use **Arcade Headers** for production — this requires an `Authorization` header with your API key and an `Arcade-User-ID` header with the user's email
+4. Add the tools your agents need from the Arcade tool catalog. The following toolkits are supported:
+
+| Service | Example tools |
+|---------|--------------|
+| **GitHub** | `Github.GetRepository`, `Github.CreateIssue`, `Github.ListPullRequests` |
+| **Gmail** | `Gmail.ListEmails`, `Gmail.SendEmail` |
+| **Google Drive** | `GoogleDrive.SearchFiles`, `GoogleDrive.GetFileContents` |
+| **Google Calendar** | `GoogleCalendar.ListEvents`, `GoogleCalendar.CreateEvent` |
+| **Google Sheets** | `GoogleSheets.GetSpreadsheet` |
+| **Google Docs** | `GoogleDocs.SearchDocuments` |
+| **Slack** | `Slack.ListConversations`, `Slack.SendMessage`, `Slack.GetMessages` |
+
+You don't need to add every tool — only the ones your agents will use. You can always add more later from the dashboard.
+
+### Pre-authorizing OAuth tokens
+
+Arcade uses a just-in-time OAuth flow: the first time a tool needs access to a service, the user must visit a URL in a browser to grant consent. Since GitHub Action runners are headless, you need to complete this authorization once from your local machine before the action can use those services.
+
+The included `scripts/authorize_arcade.py` script handles this. It walks through each service, triggers the OAuth flow, opens your browser for consent, and waits for completion. Arcade then caches the tokens server-side, keyed by your email address.
+
+#### Prerequisites
+
+```bash
+pip install arcadepy
+export ARCADE_API_KEY=your-api-key
+```
+
+#### Authorize all services
+
+```bash
+python scripts/authorize_arcade.py you@example.com
+```
+
+The email address is your Arcade account email. It's used as the `user_id` for token storage — the same identity must be used when the MCP gateway is called from CI.
+
+The script will open your browser for each service that hasn't been authorized yet. Grant consent for each one, and the script will detect completion automatically.
+
+#### Authorize specific services only
+
+```bash
+python scripts/authorize_arcade.py you@example.com --services gmail slack google-calendar
+```
+
+Available services: `github`, `gmail`, `google-drive`, `google-calendar`, `google-sheets`, `google-docs`, `slack`.
+
+#### Without auto-opening the browser
+
+```bash
+python scripts/authorize_arcade.py you@example.com --no-browser
+```
+
+This prints the authorization URLs instead of opening them, useful for remote machines or SSH sessions.
+
+#### Re-authorization
+
+You'll need to re-run the script if:
+
+- An OAuth token is revoked or expires
+- You add new services to your gateway
+- Your Google Cloud OAuth app is in "testing" mode (tokens expire after 7 days — publish the app or set it to "internal" for Google Workspace orgs to avoid this)
+
+### Configuring the MCP server for Claude Code
+
+Once your gateway is set up and tokens are cached, configure Claude Code to use it. In the GitHub Action workflow, add the MCP server before running Note Watcher:
+
+```yaml
+- name: Configure Arcade MCP gateway
+  run: |
+    claude mcp add --transport http arcade \
+      https://api.arcade.dev/mcp/your-gateway-slug \
+      --header "Authorization: Bearer ${{ secrets.ARCADE_API_KEY }}" \
+      --header "Arcade-User-ID: ${{ secrets.ARCADE_USER_ID }}"
+```
+
+Add these secrets to your repository:
+
+| Secret | Value |
+|--------|-------|
+| `ANTHROPIC_API_KEY` | Your Anthropic API key (for Claude Code) |
+| `ARCADE_API_KEY` | Your Arcade API key |
+| `ARCADE_USER_ID` | The email you used when running `authorize_arcade.py` |
+
+Claude Code will then have access to all the tools in your gateway when processing `@claude` instructions. For example:
+
+```markdown
+@claude Check my Gmail for any emails from the team about the Q4 report and summarize them here
+
+@claude Create a Google Calendar event for our standup tomorrow at 10am
+
+@claude Post a message in the #notes channel on Slack saying the weekly review is ready
+```
+
 ## Running Tests
 
 ```bash
