@@ -3,7 +3,7 @@
 import pytest
 
 from note_watcher.parser import Instruction
-from note_watcher.writer import format_result, write_result
+from note_watcher.writer import format_error, format_result, write_error, write_result
 
 
 class TestFormatResult:
@@ -116,3 +116,83 @@ class TestWriteResult:
         content = note.read_text()
         assert "Line 1\nLine 2" in content
         assert "@agent Do it" not in content
+
+
+class TestFormatError:
+    """Tests for format_error()."""
+
+    def test_basic_error_format(self) -> None:
+        result = format_error("claude", "Check calendar", "Auth required")
+        assert result == (
+            "<!-- @error claude: Check calendar\n"
+            "Auth required\n"
+            "/@error -->"
+        )
+
+    def test_multiline_error_reason(self) -> None:
+        result = format_error("agent", "Task", "Line 1\nLine 2\nLine 3")
+        assert "Line 1\nLine 2\nLine 3" in result
+        assert result.startswith("<!-- @error agent: Task")
+        assert result.endswith("/@error -->")
+
+    def test_empty_reason(self) -> None:
+        result = format_error("agent", "Task", "")
+        assert result == "<!-- @error agent: Task\n\n/@error -->"
+
+
+class TestWriteError:
+    """Tests for write_error()."""
+
+    def test_replaces_instruction_with_error_marker(self, tmp_path) -> None:
+        note = tmp_path / "note.md"
+        note.write_text("# Title\n\n@claude Check calendar\n\nMore text\n")
+
+        instruction = Instruction(
+            agent_name="claude",
+            instruction_text="Check calendar",
+            line_number=3,
+            original_text="@claude Check calendar",
+        )
+
+        write_error(str(note), instruction, "Auth required")
+
+        content = note.read_text()
+        assert "@claude Check calendar" not in content
+        assert "<!-- @error claude: Check calendar" in content
+        assert "Auth required" in content
+        assert "/@error -->" in content
+        assert "# Title" in content
+        assert "More text" in content
+
+    def test_preserves_surrounding_content(self, tmp_path) -> None:
+        note = tmp_path / "note.md"
+        note.write_text("Before\n@agent Task\nAfter\n")
+
+        instruction = Instruction(
+            agent_name="agent",
+            instruction_text="Task",
+            line_number=2,
+            original_text="@agent Task",
+        )
+
+        write_error(str(note), instruction, "Failed")
+
+        content = note.read_text()
+        lines = content.split("\n")
+        assert lines[0] == "Before"
+        assert "<!-- @error agent: Task" in content
+        assert "After" in lines[-2] or "After" in lines[-1]
+
+    def test_raises_on_changed_line(self, tmp_path) -> None:
+        note = tmp_path / "note.md"
+        note.write_text("# Title\nDifferent content\n")
+
+        instruction = Instruction(
+            agent_name="agent",
+            instruction_text="Original",
+            line_number=2,
+            original_text="@agent Original",
+        )
+
+        with pytest.raises(ValueError, match="has changed"):
+            write_error(str(note), instruction, "Reason")
