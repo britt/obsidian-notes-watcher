@@ -1,24 +1,18 @@
 # Changelog
 
-## v0.4.1
+## v0.4.1 - Arcade authentication handling
 
 - Date: 2026-03-13
 - Version: 0.4.1
 
 ### Summary
 
-This release includes updates across Note Watcher behavior and documentation.
+This release includes updated Arcade authentication handling and a pre-flight validation command.
 
-### Release notes (raw)
+### New Features
 
-```json
-{
-  "Additional Changes": [
-    "This release updates the package version to 0.4.1 to include the Arcade auth detection, error-marker behavior, and the new pre-flight check command. The distribution metadata and versioning were updated to `0.4.1` to reflect these changes."
-  ],
-  "New Features": [
-    "You can now detect Arcade authentication URLs and clearly mark authentication failures so they are easier to spot during runs. The watcher/dispatcher now records auth failures as `@error` (not `@done`), and a new `check-arcade` CLI command was added to perform pre-flight token validation before execution."
-  ]
-}
+- Added Arcade authentication URL detection, recorded authentication failures with `@error` instead of `@done`, and introduced the `note-watcher check-arcade` command for pre-flight token validation.
 
-```
+### Additional Changes
+
+- Updated distribution metadata and versioning to `0.4.1` to ship Arcade auth detection, `@error` markers, and the `check-arcade` pre-flight command.
