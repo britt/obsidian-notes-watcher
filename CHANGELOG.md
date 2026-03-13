@@ -7,7 +7,7 @@
 
 ### Summary
 
-This release includes updated Arcade authentication handling and a pre-flight validation command.
+This release includes Arcade authentication handling updates and a pre-flight validation command.
 
 ### New Features
 
