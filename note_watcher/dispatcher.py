@@ -11,6 +11,8 @@ import subprocess
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from note_watcher.result_validator import AuthFailureError, contains_arcade_auth_url
+
 if TYPE_CHECKING:
     from note_watcher.config import AgentConfig, Config
     from note_watcher.parser import Instruction
@@ -153,4 +155,8 @@ class AgentDispatcher:
         )
         if result.returncode != 0:
             return f"Error: {result.stderr.strip()}"
-        return result.stdout.strip()
+
+        output = result.stdout.strip()
+        if contains_arcade_auth_url(output):
+            raise AuthFailureError(output)
+        return output

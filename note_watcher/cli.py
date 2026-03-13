@@ -13,6 +13,7 @@ from pathlib import Path
 
 import click
 
+from note_watcher.arcade_check import SERVICE_TOOLS, check_tokens
 from note_watcher.config import load_config
 from note_watcher.dispatcher import AgentDispatcher
 from note_watcher.watcher import process_file_reparse, start_watcher
@@ -114,3 +115,39 @@ def process(process_all: bool, vault: str | None, config_path: str | None) -> No
             total_processed += count
 
     click.echo(f"Done. Processed {total_processed} instruction(s) total.")
+
+
+@main.command("check-arcade")
+@click.option(
+    "--user-id",
+    required=True,
+    help="Arcade user ID (email used with authorize_arcade.py).",
+)
+@click.option(
+    "--services",
+    multiple=True,
+    type=click.Choice(list(SERVICE_TOOLS.keys())),
+    help="Services to check (default: all).",
+)
+def check_arcade(user_id: str, services: tuple[str, ...]) -> None:
+    """Check Arcade OAuth token status for configured services.
+
+    Reports which services are authorized and which need re-authorization.
+    This is informational only — always exits 0.
+    """
+    service_list = list(services) if services else None
+    authorized, unauthorized = check_tokens(user_id, service_list)
+
+    if authorized:
+        click.echo("Authorized:")
+        for svc in authorized:
+            click.echo(f"  {svc}")
+
+    if unauthorized:
+        click.echo("Needs authorization:")
+        for svc in unauthorized:
+            click.echo(f"  {svc}")
+        click.echo(
+            "\nRun: python scripts/authorize_arcade.py "
+            f"{user_id} --services {' '.join(unauthorized)}"
+        )

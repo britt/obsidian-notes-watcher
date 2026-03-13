@@ -19,6 +19,10 @@ INSTRUCTION_PATTERN = re.compile(r"^@(\w+)[,:;.]?\s+(.+)$")
 DONE_START_PATTERN = re.compile(r"^<!--\s*@done\s+(\w+).*$")
 DONE_END_PATTERN = re.compile(r"^.*/@done\s*-->$")
 
+# Markers for failed instructions (e.g. auth failures)
+ERROR_START_PATTERN = re.compile(r"^<!--\s*@error\s+(\w+).*$")
+ERROR_END_PATTERN = re.compile(r"^.*/@error\s*-->$")
+
 
 @dataclass
 class Instruction:
@@ -44,23 +48,23 @@ def parse_instructions(content: str) -> list[Instruction]:
     """
     instructions: list[Instruction] = []
     lines = content.split("\n")
-    in_done_block = False
+    in_skip_block = False
 
     for i, line in enumerate(lines):
         stripped = line.strip()
 
-        # Check for start of a completed block
-        if DONE_START_PATTERN.match(stripped):
-            in_done_block = True
+        # Check for start of a completed or error block
+        if DONE_START_PATTERN.match(stripped) or ERROR_START_PATTERN.match(stripped):
+            in_skip_block = True
             continue
 
-        # Check for end of a completed block
-        if DONE_END_PATTERN.match(stripped):
-            in_done_block = False
+        # Check for end of a completed or error block
+        if DONE_END_PATTERN.match(stripped) or ERROR_END_PATTERN.match(stripped):
+            in_skip_block = False
             continue
 
-        # Skip lines inside completed blocks
-        if in_done_block:
+        # Skip lines inside completed/error blocks
+        if in_skip_block:
             continue
 
         # Try to match an instruction

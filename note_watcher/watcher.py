@@ -20,7 +20,8 @@ from watchdog.observers import Observer
 from note_watcher.debouncer import Debouncer
 from note_watcher.dispatcher import AgentDispatcher, UnknownAgentError
 from note_watcher.parser import parse_instructions
-from note_watcher.writer import write_result
+from note_watcher.result_validator import AuthFailureError
+from note_watcher.writer import write_error, write_result
 
 if TYPE_CHECKING:
     from note_watcher.config import Config
@@ -125,6 +126,18 @@ def process_file(file_path: str, dispatcher: AgentDispatcher) -> int:
                 # Process just the next instruction from the fresh parse
                 # The for loop will naturally move to the next one but we need
                 # to handle the shifted line numbers
+        except AuthFailureError:
+            logger.warning(
+                "Auth failure for @%s: writing error marker",
+                instruction.agent_name,
+            )
+            write_error(
+                file_path,
+                instruction,
+                "Arcade authorization required. Re-run scripts/authorize_arcade.py "
+                "to refresh tokens.",
+            )
+            processed += 1
         except UnknownAgentError as e:
             logger.warning("Skipping unknown agent: %s", e)
         except Exception as e:
@@ -170,6 +183,18 @@ def process_file_reparse(file_path: str, dispatcher: AgentDispatcher) -> int:
             write_result(file_path, instruction, result)
             processed += 1
             logger.info("Wrote result for @%s", instruction.agent_name)
+        except AuthFailureError:
+            logger.warning(
+                "Auth failure for @%s: writing error marker",
+                instruction.agent_name,
+            )
+            write_error(
+                file_path,
+                instruction,
+                "Arcade authorization required. Re-run scripts/authorize_arcade.py "
+                "to refresh tokens.",
+            )
+            processed += 1
         except UnknownAgentError as e:
             logger.warning("Skipping unknown agent: %s", e)
             break

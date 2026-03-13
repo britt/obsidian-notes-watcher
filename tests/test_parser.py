@@ -139,3 +139,43 @@ class TestParseInstructions:
         # The pattern requires the @ to be at the start of the stripped line,
         # but "Contact me at @summarizer for details" doesn't start with @
         assert instructions == []
+
+    def test_skips_error_markers(self) -> None:
+        """Content inside @error blocks should be skipped."""
+        content = (
+            "<!-- @error claude: Do something\n"
+            "Arcade authorization required.\n"
+            "/@error -->\n"
+            "\n"
+            "@echo Still pending\n"
+        )
+        instructions = parse_instructions(content)
+        assert len(instructions) == 1
+        assert instructions[0].agent_name == "echo"
+
+    def test_error_and_done_blocks_coexist(self) -> None:
+        """Both @done and @error blocks are skipped correctly."""
+        content = (
+            "<!-- @done summarizer: Task 1\n"
+            "Result 1\n"
+            "/@done -->\n"
+            "\n"
+            "<!-- @error claude: Task 2\n"
+            "Auth failed\n"
+            "/@error -->\n"
+            "\n"
+            "@echo Still here\n"
+        )
+        instructions = parse_instructions(content)
+        assert len(instructions) == 1
+        assert instructions[0].agent_name == "echo"
+
+    def test_nested_at_in_error_block_ignored(self) -> None:
+        """@ mentions inside error blocks should be ignored."""
+        content = (
+            "<!-- @error claude: Check calendar\n"
+            "@uppercase This is inside error block\n"
+            "/@error -->\n"
+        )
+        instructions = parse_instructions(content)
+        assert instructions == []

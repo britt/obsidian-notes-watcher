@@ -7,6 +7,7 @@ import pytest
 
 from note_watcher.config import AgentConfig, Config
 from note_watcher.dispatcher import AgentDispatcher
+from note_watcher.result_validator import AuthFailureError
 from note_watcher.watcher import NoteEventHandler, process_file_reparse
 
 
@@ -162,3 +163,48 @@ class TestProcessFileReparse:
             mock_dispatch.assert_called_once()
             _, kwargs = mock_dispatch.call_args
             assert kwargs.get("file_path") == str(note)
+
+    def test_auth_failure_writes_error_marker(
+        self, tmp_path: Path, dispatcher: AgentDispatcher
+    ) -> None:
+        """When dispatch raises AuthFailureError, an @error marker is written."""
+        note = tmp_path / "note.md"
+        note.write_text("@echo Check my calendar\n")
+
+        with patch.object(
+            dispatcher,
+            "dispatch",
+            side_effect=AuthFailureError("Visit https://cloud.arcade.dev/auth"),
+        ):
+            count = process_file_reparse(str(note), dispatcher)
+
+        assert count == 1
+        content = note.read_text()
+        assert "<!-- @error echo: Check my calendar" in content
+        assert "/@error -->" in content
+        assert "<!-- @done" not in content
+
+    def test_auth_failure_continues_processing(
+        self, tmp_path: Path, dispatcher: AgentDispatcher
+    ) -> None:
+        """After an auth failure, processing continues to the next instruction."""
+        note = tmp_path / "note.md"
+        note.write_text("@echo First task\n\n@echo Second task\n")
+
+        call_count = 0
+        original_dispatch = dispatcher.dispatch
+
+        def side_effect(instruction, **kwargs):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                raise AuthFailureError("auth url here")
+            return original_dispatch(instruction, **kwargs)
+
+        with patch.object(dispatcher, "dispatch", side_effect=side_effect):
+            count = process_file_reparse(str(note), dispatcher)
+
+        assert count == 2
+        content = note.read_text()
+        assert "<!-- @error echo: First task" in content
+        assert "<!-- @done echo: Second task" in content

@@ -7,6 +7,7 @@ import pytest
 from note_watcher.config import AgentConfig, Config
 from note_watcher.dispatcher import AgentDispatcher, UnknownAgentError
 from note_watcher.parser import Instruction
+from note_watcher.result_validator import AuthFailureError
 
 
 @pytest.fixture
@@ -377,3 +378,57 @@ class TestCommandAgentEnvVars:
         assert "Custom prompt only." in result
         # Should NOT contain the default prompt text
         assert "Obsidian vault at" not in result
+
+
+class TestAuthFailureDetection:
+    """Tests for Arcade auth failure detection in command agents."""
+
+    def test_command_agent_raises_on_arcade_auth_url(
+        self, tmp_path
+    ) -> None:
+        """Command output with Arcade auth URL raises AuthFailureError."""
+        # Use echo to simulate an agent outputting an auth URL
+        auth_output = (
+            "I need authorization. Visit: "
+            "https://accounts.google.com/o/oauth2/v2/auth?"
+            "redirect_uri=https%3A%2F%2Fcloud.arcade.dev%2Fapi%2Fv1%2Foauth%2Fcallback"
+        )
+        config = Config(
+            vault=tmp_path,
+            agents={
+                "auth_agent": AgentConfig(
+                    name="auth_agent",
+                    type="command",
+                    command=f"echo '{auth_output}'",
+                ),
+            },
+        )
+        dispatcher = AgentDispatcher(config)
+        instruction = _make_instruction("auth_agent", "check calendar")
+        with pytest.raises(AuthFailureError) as exc_info:
+            dispatcher.dispatch(instruction, file_path="/tmp/note.md")
+        assert "arcade.dev" in exc_info.value.result
+
+    def test_command_agent_returns_normal_result(self, tmp_path) -> None:
+        """Normal command output is returned without raising."""
+        config = Config(
+            vault=tmp_path,
+            agents={
+                "normal_agent": AgentConfig(
+                    name="normal_agent",
+                    type="command",
+                    command="echo 'Updated the note successfully.'",
+                ),
+            },
+        )
+        dispatcher = AgentDispatcher(config)
+        instruction = _make_instruction("normal_agent", "update note")
+        result = dispatcher.dispatch(instruction, file_path="/tmp/note.md")
+        assert "Updated the note successfully." in result
+
+    def test_echo_agent_not_validated(self, dispatcher: AgentDispatcher) -> None:
+        """Built-in agents (echo) do not go through auth validation."""
+        instruction = _make_instruction("echo_agent", "https://api.arcade.dev/auth/start")
+        # Should return the text as-is, not raise AuthFailureError
+        result = dispatcher.dispatch(instruction)
+        assert result == "https://api.arcade.dev/auth/start"
