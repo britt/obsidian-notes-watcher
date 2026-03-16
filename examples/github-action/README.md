@@ -73,3 +73,13 @@ Added summary and extracted 3 action items to Tasks.md.
 ```
 
 The completion comment is just a record — the real work is in the commit, where the agent's changes to your notes are pushed back to the repository.
+
+If an instruction fails, Note Watcher replaces the instruction with an error marker instead of `@done`:
+
+```markdown
+<!-- @error claude: Summarize the key points of this meeting and add action items to my Tasks note
+Reason for failure goes here.
+/@error -->
+```
+
+`@error` blocks are skipped during parsing (like `@done` blocks). Retrying requires deleting the `@error` block and re-adding the original `@agent ...` instruction line.
