@@ -4,6 +4,7 @@ Tests the end-to-end flow: file content → parse → dispatch → write.
 """
 
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
@@ -188,3 +189,40 @@ class TestEndToEnd:
         # All should be identical
         assert content1 == content2 == content3
         assert content1.count("<!-- @done") == 1
+
+    def test_multiple_instructions_with_agent_file_modification(
+        self, tmp_path: Path, dispatcher: AgentDispatcher
+    ) -> None:
+        """Multiple instructions processed even when agent
+        modifies file during dispatch."""
+        note = tmp_path / "note.md"
+        note.write_text(
+            "# Weekly Review\n"
+            "\n"
+            "@echo Reformat the meetings column\n"
+            "\n"
+            "Some notes in between.\n"
+            "\n"
+            "@uppercase Summarize the review\n"
+        )
+
+        # Patch dispatcher to simulate agent modifying the file during dispatch
+        original_dispatch = dispatcher.dispatch
+
+        def modifying_dispatch(instruction, **kwargs):
+            result = original_dispatch(instruction, **kwargs)
+            # Simulate agent inserting lines at top of file (shifts all line numbers)
+            current = note.read_text()
+            note.write_text("<!-- agent was here -->\n" + current)
+            return result
+
+        with patch.object(dispatcher, "dispatch", side_effect=modifying_dispatch):
+            count = process_file_reparse(str(note), dispatcher)
+
+        assert count == 2
+
+        final = note.read_text()
+        assert final.count("<!-- @done") == 2
+        assert final.count("/@done -->") == 2
+        assert "Reformat the meetings column" in final
+        assert "SUMMARIZE THE REVIEW" in final
