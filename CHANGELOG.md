@@ -9,9 +9,9 @@ title: Release notes
 - Date: 2026-03-23
 - Version: 0.4.2
 
-Summary: This release includes the changes listed below.
+Summary: This release covers CI workflow maintenance and a patch version update.
 
 ### Additional Changes
 
-- Updated CI configuration to use the latest supported Python setup step across automation.
-- Updated the package to a new patch release to reflect the latest set of changes.
+- Updated GitHub Actions workflows and the composite action to use `actions/setup-python@v6`.
+- Updated package version from `0.4.1` to `0.4.2`.
