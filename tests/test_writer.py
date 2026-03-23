@@ -199,7 +199,8 @@ class TestWriteError:
 
 
 class TestReplaceInstructionAfterFileModification:
-    """Tests for writing results when file has been modified by agent during dispatch."""
+    """Tests for writing results when file has been modified
+    by agent during dispatch."""
 
     def test_write_result_finds_instruction_after_line_shift(self, tmp_path):
         """write_result succeeds even when instruction moved to a different line."""
@@ -214,7 +215,10 @@ class TestReplaceInstructionAfterFileModification:
         assert instruction.line_number == 2  # line 2 in original
 
         # Simulate agent modifying the file during dispatch — adds lines above
-        modified_content = "# Title\nAgent added this line\nAnother new line\n@echo Hello world\nMore content\n"
+        modified_content = (
+            "# Title\nAgent added this line\nAnother new line\n"
+            "@echo Hello world\nMore content\n"
+        )
         note.write_text(modified_content)
 
         # write_result should still find and replace the instruction

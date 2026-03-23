@@ -193,7 +193,8 @@ class TestEndToEnd:
     def test_multiple_instructions_with_agent_file_modification(
         self, tmp_path: Path, dispatcher: AgentDispatcher
     ) -> None:
-        """Multiple instructions processed even when agent modifies file during dispatch."""
+        """Multiple instructions processed even when agent
+        modifies file during dispatch."""
         note = tmp_path / "note.md"
         note.write_text(
             "# Weekly Review\n"
