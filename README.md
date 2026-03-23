@@ -10,6 +10,16 @@ Agent response summary goes here.
 /@done -->
 ```
 
+If an instruction fails, Note Watcher can write an error marker instead of `@done`:
+
+```markdown
+<!-- @error agent_name: do something
+Reason for failure goes here.
+/@error -->
+```
+
+`@error` blocks are skipped by the parser (like `@done` blocks), so they are not reprocessed automatically. To retry an instruction, delete the `@error` block and re-add the instruction line.
+
 The real work happens in the commit: the agent's changes to your vault are committed back to Git. The completion comment is just a record that the instruction was processed.
 
 ## Modes of Operation
@@ -305,6 +315,29 @@ You'll need to re-run the script if:
 - An OAuth token is revoked or expires
 - You add new services to your gateway
 - Your Google Cloud OAuth app is in "testing" mode (tokens expire after 7 days — publish the app or set it to "internal" for Google Workspace orgs to avoid this)
+
+### Checking Arcade authorization status
+
+Use `note-watcher check-arcade` to see which Arcade services are authorized for a given user ID before running agents:
+
+```bash
+note-watcher check-arcade --user-id you@example.com
+```
+
+To check specific services only, pass `--services` multiple times:
+
+```bash
+note-watcher check-arcade --user-id you@example.com \
+  --services gmail \
+  --services slack
+```
+
+The command prints two sections:
+
+- `Authorized:` services with valid tokens
+- `Needs authorization:` services that require OAuth
+
+It also prints a `python scripts/authorize_arcade.py ...` command that can be used to authorize any missing services. `check-arcade` is informational only and always exits with status code 0.
 
 ### Configuring the MCP server for Claude Code
 
