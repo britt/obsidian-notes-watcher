@@ -9,12 +9,11 @@ from __future__ import annotations
 import fnmatch
 import logging
 import signal
-import sys
 import time
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from watchdog.events import FileSystemEventHandler, FileModifiedEvent
+from watchdog.events import FileModifiedEvent, FileSystemEventHandler
 from watchdog.observers import Observer
 
 from note_watcher.debouncer import Debouncer
@@ -79,71 +78,6 @@ class NoteEventHandler(FileSystemEventHandler):
             if fnmatch.fnmatch(str(path), pattern):
                 return True
         return False
-
-
-def process_file(file_path: str, dispatcher: AgentDispatcher) -> int:
-    """Parse a file, dispatch instructions, and write results.
-
-    Args:
-        file_path: Path to the markdown file to process.
-        dispatcher: The agent dispatcher to use.
-
-    Returns:
-        Number of instructions processed.
-    """
-    path = Path(file_path)
-    if not path.exists():
-        logger.warning("File no longer exists: %s", file_path)
-        return 0
-
-    content = path.read_text()
-    instructions = parse_instructions(content)
-
-    if not instructions:
-        logger.debug("No pending instructions in %s", file_path)
-        return 0
-
-    processed = 0
-    for instruction in instructions:
-        try:
-            logger.info(
-                "Dispatching @%s: %s",
-                instruction.agent_name,
-                instruction.instruction_text[:50],
-            )
-            result = dispatcher.dispatch(instruction, file_path=file_path)
-            write_result(file_path, instruction, result)
-            processed += 1
-            logger.info("Wrote result for @%s", instruction.agent_name)
-
-            # Re-read content after each write since line numbers shift
-            # For subsequent instructions, we need to re-parse
-            if processed < len(instructions):
-                content = path.read_text()
-                remaining = parse_instructions(content)
-                if not remaining:
-                    break
-                # Process just the next instruction from the fresh parse
-                # The for loop will naturally move to the next one but we need
-                # to handle the shifted line numbers
-        except AuthFailureError:
-            logger.warning(
-                "Auth failure for @%s: writing error marker",
-                instruction.agent_name,
-            )
-            write_error(
-                file_path,
-                instruction,
-                "Arcade authorization required. Re-run scripts/authorize_arcade.py "
-                "to refresh tokens.",
-            )
-            processed += 1
-        except UnknownAgentError as e:
-            logger.warning("Skipping unknown agent: %s", e)
-        except Exception as e:
-            logger.error("Error processing instruction: %s", e)
-
-    return processed
 
 
 def process_file_reparse(file_path: str, dispatcher: AgentDispatcher) -> int:
