@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "notes-watcher"
-version = "0.4.1"
+version = "0.4.2"
 description = "A daemon that detects @ mentions in Obsidian notes, dispatches instructions to AI agents, and writes results back inline."
 readme = "README.md"
 requires-python = ">=3.10"
