@@ -51,32 +51,39 @@ def _replace_instruction_line(
 ) -> None:
     """Replace an instruction line in a file with a replacement string.
 
+    First attempts line-number match (fast path). If the file has been
+    modified since parsing (e.g., by an agent during dispatch), falls back
+    to searching for the instruction text on any line.
+
     Args:
         file_path: Path to the markdown file.
         instruction: The original instruction that was processed.
         replacement: The formatted text to replace the instruction line.
+
+    Raises:
+        ValueError: If the instruction text is not found anywhere in the file.
     """
     path = Path(file_path)
     content = path.read_text()
     lines = content.split("\n")
 
+    target_text = instruction.original_text.strip()
+
+    # Fast path: check original line number
     line_idx = instruction.line_number - 1
+    if 0 <= line_idx < len(lines) and lines[line_idx].strip() == target_text:
+        lines[line_idx] = replacement
+        path.write_text("\n".join(lines))
+        return
 
-    if line_idx < 0 or line_idx >= len(lines):
-        raise IndexError(
-            f"Instruction line {instruction.line_number} out of range "
-            f"(file has {len(lines)} lines)"
-        )
+    # Fallback: search all lines for the instruction text
+    for i, line in enumerate(lines):
+        if line.strip() == target_text:
+            lines[i] = replacement
+            path.write_text("\n".join(lines))
+            return
 
-    if lines[line_idx].strip() != instruction.original_text.strip():
-        raise ValueError(
-            f"Line {instruction.line_number} has changed since parsing. "
-            f"Expected: {instruction.original_text.strip()!r}, "
-            f"Got: {lines[line_idx].strip()!r}"
-        )
-
-    lines[line_idx] = replacement
-    path.write_text("\n".join(lines))
+    raise ValueError(f"Instruction {target_text!r} not found in file {file_path}")
 
 
 def write_result(

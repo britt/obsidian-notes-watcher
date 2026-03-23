@@ -83,7 +83,7 @@ class TestWriteResult:
             original_text="@agent Original",
         )
 
-        with pytest.raises(ValueError, match="has changed"):
+        with pytest.raises(ValueError, match="not found in file"):
             write_result(str(note), instruction, "Result")
 
     def test_raises_on_out_of_range_line(self, tmp_path) -> None:
@@ -97,7 +97,7 @@ class TestWriteResult:
             original_text="@agent Task",
         )
 
-        with pytest.raises(IndexError, match="out of range"):
+        with pytest.raises(ValueError, match="not found in file"):
             write_result(str(note), instruction, "Result")
 
     def test_write_result_with_multiline_output(self, tmp_path) -> None:
@@ -194,7 +194,7 @@ class TestWriteError:
             original_text="@agent Original",
         )
 
-        with pytest.raises(ValueError, match="has changed"):
+        with pytest.raises(ValueError, match="not found in file"):
             write_error(str(note), instruction, "Reason")
 
 
