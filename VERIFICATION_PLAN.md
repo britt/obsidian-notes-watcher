@@ -77,6 +77,66 @@
 
 **If Blocked**: Check config.py for ignore pattern handling.
 
+### Scenario 5: Multiple @ Mentions All Get Commented Out (Issue #24)
+
+**Context**: A test vault with a markdown note containing two or more `@` instructions in the same file. The vault is a Git repository with a clean working tree. At least one agent is a `command` type that modifies the file during processing (e.g., a Claude Code agent). If no command agent is available, use `echo` to verify the basic multi-mention flow.
+
+**Steps**:
+1. Create a markdown file in the test vault with this content:
+   ```
+   # Weekly Review
+
+   @echo reformat the meetings column
+
+   Some notes between instructions.
+
+   @echo summarize the review section
+   ```
+2. Run `note-watcher process --all --vault /path/to/test-vault --config /path/to/config.yml`
+3. Read the markdown file after processing
+
+**Success Criteria**:
+- [ ] Both `@echo` instructions are replaced with `<!-- @done echo: ... /@done -->` completion markers
+- [ ] The file contains exactly 2 `<!-- @done` markers and 2 `/@done -->` markers
+- [ ] The text between the instructions ("Some notes between instructions.") is preserved outside both @done blocks
+- [ ] No instructions remain as raw `@echo` lines
+- [ ] Running the command a second time processes 0 instructions (idempotent)
+
+**If Blocked**: Check writer.py `_replace_instruction_line` — the fix uses text-based search instead of line-number matching.
+
+### Scenario 6: Multiple @ Mentions With File-Modifying Agent (Issue #24 exact scenario)
+
+**Context**: A test vault with a `command`-type agent configured that modifies the note file during dispatch (e.g., a Claude Code agent with a system prompt telling it to edit the note). This is the exact scenario from issue #24.
+
+**Steps**:
+1. Configure a command agent in config.yml that modifies the note file during processing. For example, a shell script that prepends a line to the file:
+   ```yaml
+   agents:
+     modifier:
+       type: command
+       command: |
+         FILE="$NOTE_WATCHER_FILE_PATH"
+         sed -i '' '1i\
+         <!-- agent modified this file -->' "$FILE"
+         echo "Done modifying"
+   ```
+2. Create a markdown file with:
+   ```
+   @modifier first task
+   @modifier second task
+   ```
+3. Run `note-watcher process --all --vault /path/to/test-vault --config /path/to/config.yml`
+4. Read the markdown file after processing
+
+**Success Criteria**:
+- [ ] Both instructions are wrapped in `<!-- @done modifier: ... /@done -->` markers
+- [ ] The file contains exactly 2 `<!-- @done` markers and 2 `/@done -->` markers
+- [ ] The agent's file modifications are preserved (e.g., the prepended comment lines exist)
+- [ ] Running the command a second time processes 0 instructions (no double-processing)
+- [ ] The application does not crash or log errors about line numbers changing
+
+**If Blocked**: Verify the command agent actually modifies the file during dispatch. Check that `_replace_instruction_line` falls back to text-based search when line numbers shift.
+
 ## Verification Rules
 
 - Never use mocks or fakes
