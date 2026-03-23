@@ -2,7 +2,7 @@
 
 import pytest
 
-from note_watcher.parser import Instruction
+from note_watcher.parser import Instruction, parse_instructions
 from note_watcher.writer import format_error, format_result, write_error, write_result
 
 
@@ -196,3 +196,69 @@ class TestWriteError:
 
         with pytest.raises(ValueError, match="has changed"):
             write_error(str(note), instruction, "Reason")
+
+
+class TestReplaceInstructionAfterFileModification:
+    """Tests for writing results when file has been modified by agent during dispatch."""
+
+    def test_write_result_finds_instruction_after_line_shift(self, tmp_path):
+        """write_result succeeds even when instruction moved to a different line."""
+        note = tmp_path / "note.md"
+        # Original content when parsed — instruction is on line 2
+        original_content = "# Title\n@echo Hello world\nMore content\n"
+        note.write_text(original_content)
+
+        instructions = parse_instructions(original_content)
+        assert len(instructions) == 1
+        instruction = instructions[0]
+        assert instruction.line_number == 2  # line 2 in original
+
+        # Simulate agent modifying the file during dispatch — adds lines above
+        modified_content = "# Title\nAgent added this line\nAnother new line\n@echo Hello world\nMore content\n"
+        note.write_text(modified_content)
+
+        # write_result should still find and replace the instruction
+        write_result(str(note), instruction, "Hello world")
+
+        final = note.read_text()
+        assert "<!-- @done echo: Hello world" in final
+        assert "/@done -->" in final
+        assert "@echo Hello world" not in final
+        # Surrounding content preserved
+        assert "# Title" in final
+        assert "Agent added this line" in final
+        assert "More content" in final
+
+    def test_write_result_when_instruction_no_longer_in_file(self, tmp_path):
+        """write_result raises when instruction text is completely gone from file."""
+        note = tmp_path / "note.md"
+        original_content = "# Title\n@echo Hello world\n"
+        note.write_text(original_content)
+
+        instructions = parse_instructions(original_content)
+        instruction = instructions[0]
+
+        # Agent removed the instruction line entirely
+        note.write_text("# Title\nSomething completely different\n")
+
+        with pytest.raises(ValueError, match="not found in file"):
+            write_result(str(note), instruction, "Hello world")
+
+    def test_write_error_finds_instruction_after_line_shift(self, tmp_path):
+        """write_error succeeds even when instruction moved to a different line."""
+        note = tmp_path / "note.md"
+        original_content = "@echo Hello world\n"
+        note.write_text(original_content)
+
+        instructions = parse_instructions(original_content)
+        instruction = instructions[0]
+
+        # Simulate line shift
+        note.write_text("New first line\n@echo Hello world\n")
+
+        write_error(str(note), instruction, "Auth required")
+
+        final = note.read_text()
+        assert "<!-- @error echo: Hello world" in final
+        assert "/@error -->" in final
+        assert "@echo Hello world" not in final
