@@ -5,6 +5,7 @@ Wraps results in completed markers to prevent reprocessing.
 
 from __future__ import annotations
 
+import uuid
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -44,21 +45,26 @@ def format_error(agent_name: str, instruction_text: str, reason: str) -> str:
     return f"<!-- @error {agent_name}: {instruction_text}\n{reason}\n/@error -->"
 
 
-def format_pending(agent_name: str, instruction_text: str) -> str:
+def format_pending(agent_name: str, instruction_text: str, token: str) -> str:
     """Format a pending marker written in place of an instruction while it runs.
 
     The marker is intentionally parser-neutral (it is not a @done, @error, or
-    @agent line) so the parser ignores it, and it carries the agent name and
-    instruction text so it can be located again after dispatch.
+    @agent line) so the parser ignores it, and it carries a unique token plus
+    the agent name and instruction text so the exact sentinel can be located
+    again after dispatch and recovered if a run crashes mid-flight.
 
     Args:
         agent_name: Name of the agent that is processing the instruction.
         instruction_text: The original instruction text from the @ mention.
+        token: A unique token disambiguating this sentinel from any other.
 
     Returns:
         A single-line HTML comment sentinel.
     """
-    return f"<!-- note-watcher: processing @{agent_name} {instruction_text} -->"
+    return (
+        f"<!-- note-watcher: processing [{token}] "
+        f"@{agent_name} {instruction_text} -->"
+    )
 
 
 def _replace_line(
@@ -189,9 +195,12 @@ def write_pending(file_path: str | Path, instruction: Instruction) -> str:
         instruction: The instruction about to be dispatched.
 
     Returns:
-        The sentinel string written into the file.
+        The sentinel string written into the file (with its unique token).
     """
-    sentinel = format_pending(instruction.agent_name, instruction.instruction_text)
+    token = uuid.uuid4().hex[:8]
+    sentinel = format_pending(
+        instruction.agent_name, instruction.instruction_text, token
+    )
     _replace_instruction_line(file_path, instruction, sentinel)
     return sentinel
 
@@ -239,23 +248,3 @@ def finalize_error(
         instruction.agent_name, instruction.instruction_text, reason
     )
     _replace_line(file_path, sentinel, formatted, append_if_missing=True)
-
-
-def restore_instruction(
-    file_path: str | Path,
-    sentinel: str,
-    instruction: Instruction,
-) -> None:
-    """Restore the original instruction in place of a pending sentinel.
-
-    Used when dispatch fails in a way that should leave the instruction for a
-    later retry (e.g. an unknown agent) rather than marking it complete.
-
-    Args:
-        file_path: Path to the markdown file.
-        sentinel: The sentinel previously written by ``write_pending``.
-        instruction: The original instruction to restore.
-    """
-    _replace_line(
-        file_path, sentinel, instruction.original_text, append_if_missing=True
-    )

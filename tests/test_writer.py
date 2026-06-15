@@ -2,14 +2,13 @@
 
 import pytest
 
-from note_watcher.parser import Instruction, parse_instructions
+from note_watcher.parser import Instruction, parse_instructions, parse_pending
 from note_watcher.writer import (
     finalize_error,
     finalize_result,
     format_error,
     format_pending,
     format_result,
-    restore_instruction,
     write_error,
     write_pending,
     write_result,
@@ -281,15 +280,26 @@ class TestReplaceInstructionAfterFileModification:
 class TestFormatPending:
     """Tests for format_pending()."""
 
-    def test_sentinel_is_a_single_line_comment(self) -> None:
-        sentinel = format_pending("echo", "do something")
-        assert sentinel == "<!-- note-watcher: processing @echo do something -->"
+    def test_sentinel_embeds_token_and_is_single_line(self) -> None:
+        sentinel = format_pending("echo", "do something", "ab12cd34")
+        assert sentinel == (
+            "<!-- note-watcher: processing [ab12cd34] @echo do something -->"
+        )
         assert "\n" not in sentinel
 
     def test_sentinel_is_not_parsed_as_instruction(self) -> None:
         """The pending sentinel must be ignored by the parser."""
-        sentinel = format_pending("echo", "do something")
+        sentinel = format_pending("echo", "do something", "ab12cd34")
         assert parse_instructions(sentinel) == []
+
+    def test_sentinel_is_recoverable_by_parse_pending(self) -> None:
+        """The sentinel round-trips through the recovery parser."""
+        sentinel = format_pending("echo", "do something", "ab12cd34")
+        pending = parse_pending(sentinel)
+        assert len(pending) == 1
+        assert pending[0].token == "ab12cd34"
+        assert pending[0].agent_name == "echo"
+        assert pending[0].instruction_text == "do something"
 
 
 class TestPendingLifecycle:
@@ -316,6 +326,27 @@ class TestPendingLifecycle:
         assert "\n@echo Hello world\n" not in content
         assert parse_instructions(content) == []
 
+    def test_write_pending_generates_a_unique_token_per_call(self, tmp_path):
+        """Two identical instructions get distinct sentinels (no collision)."""
+        note = tmp_path / "note.md"
+        note.write_text("@echo Hello world\n@echo Hello world\n")
+
+        first = write_pending(str(note), self._instruction())
+        second = write_pending(
+            str(note),
+            Instruction(
+                agent_name="echo",
+                instruction_text="Hello world",
+                line_number=2,
+                original_text="@echo Hello world",
+            ),
+        )
+
+        assert first != second
+        content = note.read_text()
+        assert first in content
+        assert second in content
+
     def test_finalize_result_replaces_sentinel_in_place(self, tmp_path):
         note = tmp_path / "note.md"
         instruction = self._instruction()
@@ -338,8 +369,7 @@ class TestPendingLifecycle:
         note = tmp_path / "note.md"
         instruction = self._instruction()
         note.write_text("@echo Hello world\n")
-        write_pending(str(note), instruction)
-        sentinel = format_pending("echo", "Hello world")
+        sentinel = write_pending(str(note), instruction)
 
         # Agent rewrote the whole file, removing the sentinel.
         note.write_text("Completely new content from the agent.\n")
@@ -365,15 +395,3 @@ class TestPendingLifecycle:
         assert "<!-- @error echo: Hello world" in content
         assert "Auth required" in content
         assert "/@error -->" in content
-
-    def test_restore_instruction_puts_original_back(self, tmp_path):
-        note = tmp_path / "note.md"
-        instruction = self._instruction()
-        note.write_text("@echo Hello world\n")
-        sentinel = write_pending(str(note), instruction)
-
-        restore_instruction(str(note), sentinel, instruction)
-
-        content = note.read_text()
-        assert sentinel not in content
-        assert "@echo Hello world" in content
