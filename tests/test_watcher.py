@@ -208,3 +208,48 @@ class TestProcessFileReparse:
         content = note.read_text()
         assert "<!-- @error echo: First task" in content
         assert "<!-- @done echo: Second task" in content
+
+    def test_unknown_agent_leaves_instruction_for_retry(
+        self, tmp_path: Path, dispatcher: AgentDispatcher
+    ) -> None:
+        """Unknown agents leave the instruction intact (no sentinel/marker)."""
+        note = tmp_path / "note.md"
+        note.write_text("# Title\n\n@nonexistent do a thing\n")
+
+        count = process_file_reparse(str(note), dispatcher)
+
+        assert count == 0
+        content = note.read_text()
+        assert "@nonexistent do a thing" in content
+        assert "note-watcher: processing" not in content
+        assert "<!-- @done" not in content
+
+    def test_dispatch_error_leaves_instruction_for_retry(
+        self, tmp_path: Path, dispatcher: AgentDispatcher
+    ) -> None:
+        """An unexpected dispatch error restores the instruction for retry."""
+        note = tmp_path / "note.md"
+        note.write_text("@echo do a thing\n")
+
+        with patch.object(dispatcher, "dispatch", side_effect=RuntimeError("boom")):
+            count = process_file_reparse(str(note), dispatcher)
+
+        assert count == 0
+        content = note.read_text()
+        assert "@echo do a thing" in content
+        assert "note-watcher: processing" not in content
+
+    def test_break_when_pending_write_fails(
+        self, tmp_path: Path, dispatcher: AgentDispatcher
+    ) -> None:
+        """If the sentinel can't be written, processing stops without crashing."""
+        note = tmp_path / "note.md"
+        note.write_text("@echo do a thing\n")
+
+        with patch(
+            "note_watcher.watcher.write_pending",
+            side_effect=ValueError("cannot write"),
+        ):
+            count = process_file_reparse(str(note), dispatcher)
+
+        assert count == 0
