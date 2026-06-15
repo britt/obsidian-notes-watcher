@@ -226,3 +226,44 @@ class TestEndToEnd:
         assert final.count("/@done -->") == 2
         assert "Reformat the meetings column" in final
         assert "SUMMARIZE THE REVIEW" in final
+
+    def test_done_marker_written_when_agent_removes_instruction_line(
+        self, tmp_path: Path, dispatcher: AgentDispatcher
+    ) -> None:
+        """Issue #12: an agent that follows its instruction well and rewrites
+        the note (removing the original @instruction line) still gets a @done
+        marker with its response written back."""
+        note = tmp_path / "note.md"
+        note.write_text(
+            "# Weekly Review\n"
+            "\n"
+            "@echo reformat the meetings section\n"
+            "\n"
+            "Notes here.\n"
+        )
+
+        def rewriting_dispatch(instruction, **kwargs):
+            # Agent rewrites the note, consuming the original @echo line.
+            note.write_text(
+                "# Weekly Review\n"
+                "\n"
+                "## Meetings (reformatted)\n"
+                "\n"
+                "Notes here.\n"
+            )
+            return "AGENT_RESPONSE_TEXT"
+
+        with patch.object(dispatcher, "dispatch", side_effect=rewriting_dispatch):
+            count = process_file_reparse(str(note), dispatcher)
+
+        final = note.read_text()
+        # The agent's modifications are preserved.
+        assert "## Meetings (reformatted)" in final
+        # The completion marker is written and the response is pasted in.
+        assert count == 1
+        assert final.count("<!-- @done") == 1
+        assert "<!-- @done echo: reformat the meetings section" in final
+        assert "AGENT_RESPONSE_TEXT" in final
+        assert "/@done -->" in final
+        # No raw instruction remains.
+        assert "@echo reformat the meetings section" not in final

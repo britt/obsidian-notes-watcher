@@ -20,7 +20,12 @@ from note_watcher.debouncer import Debouncer
 from note_watcher.dispatcher import AgentDispatcher, UnknownAgentError
 from note_watcher.parser import parse_instructions
 from note_watcher.result_validator import AuthFailureError
-from note_watcher.writer import write_error, write_result
+from note_watcher.writer import (
+    finalize_error,
+    finalize_result,
+    restore_instruction,
+    write_pending,
+)
 
 if TYPE_CHECKING:
     from note_watcher.config import Config
@@ -107,14 +112,26 @@ def process_file_reparse(file_path: str, dispatcher: AgentDispatcher) -> int:
             break
 
         instruction = instructions[0]
+        logger.info(
+            "Dispatching @%s: %s",
+            instruction.agent_name,
+            instruction.instruction_text[:50],
+        )
+
+        # Replace the instruction with a sentinel *before* dispatching, while
+        # the instruction line is still guaranteed to be present. The agent may
+        # rewrite the note (including removing the instruction line) during
+        # dispatch, so we anchor on the sentinel rather than the original line
+        # when writing the result back (issue #12).
         try:
-            logger.info(
-                "Dispatching @%s: %s",
-                instruction.agent_name,
-                instruction.instruction_text[:50],
-            )
+            sentinel = write_pending(file_path, instruction)
+        except Exception as e:
+            logger.error("Error preparing instruction: %s", e)
+            break
+
+        try:
             result = dispatcher.dispatch(instruction, file_path=file_path)
-            write_result(file_path, instruction, result)
+            finalize_result(file_path, sentinel, instruction, result)
             processed += 1
             logger.info("Wrote result for @%s", instruction.agent_name)
         except AuthFailureError:
@@ -122,8 +139,9 @@ def process_file_reparse(file_path: str, dispatcher: AgentDispatcher) -> int:
                 "Auth failure for @%s: writing error marker",
                 instruction.agent_name,
             )
-            write_error(
+            finalize_error(
                 file_path,
+                sentinel,
                 instruction,
                 "Arcade authorization required. Re-run scripts/authorize_arcade.py "
                 "to refresh tokens.",
@@ -131,9 +149,11 @@ def process_file_reparse(file_path: str, dispatcher: AgentDispatcher) -> int:
             processed += 1
         except UnknownAgentError as e:
             logger.warning("Skipping unknown agent: %s", e)
+            restore_instruction(file_path, sentinel, instruction)
             break
         except Exception as e:
             logger.error("Error processing instruction: %s", e)
+            restore_instruction(file_path, sentinel, instruction)
             break
 
     return processed

@@ -3,7 +3,17 @@
 import pytest
 
 from note_watcher.parser import Instruction, parse_instructions
-from note_watcher.writer import format_error, format_result, write_error, write_result
+from note_watcher.writer import (
+    finalize_error,
+    finalize_result,
+    format_error,
+    format_pending,
+    format_result,
+    restore_instruction,
+    write_error,
+    write_pending,
+    write_result,
+)
 
 
 class TestFormatResult:
@@ -266,3 +276,104 @@ class TestReplaceInstructionAfterFileModification:
         assert "<!-- @error echo: Hello world" in final
         assert "/@error -->" in final
         assert "@echo Hello world" not in final
+
+
+class TestFormatPending:
+    """Tests for format_pending()."""
+
+    def test_sentinel_is_a_single_line_comment(self) -> None:
+        sentinel = format_pending("echo", "do something")
+        assert sentinel == "<!-- note-watcher: processing @echo do something -->"
+        assert "\n" not in sentinel
+
+    def test_sentinel_is_not_parsed_as_instruction(self) -> None:
+        """The pending sentinel must be ignored by the parser."""
+        sentinel = format_pending("echo", "do something")
+        assert parse_instructions(sentinel) == []
+
+
+class TestPendingLifecycle:
+    """Tests for write_pending / finalize_result / finalize_error / restore."""
+
+    def _instruction(self) -> Instruction:
+        return Instruction(
+            agent_name="echo",
+            instruction_text="Hello world",
+            line_number=2,
+            original_text="@echo Hello world",
+        )
+
+    def test_write_pending_replaces_instruction_with_sentinel(self, tmp_path):
+        note = tmp_path / "note.md"
+        note.write_text("# Title\n@echo Hello world\nMore\n")
+
+        sentinel = write_pending(str(note), self._instruction())
+
+        content = note.read_text()
+        assert sentinel in content
+        # The original instruction line is gone, and the sentinel that replaced
+        # it must not be re-parsed as a live instruction.
+        assert "\n@echo Hello world\n" not in content
+        assert parse_instructions(content) == []
+
+    def test_finalize_result_replaces_sentinel_in_place(self, tmp_path):
+        note = tmp_path / "note.md"
+        instruction = self._instruction()
+        note.write_text("# Title\n@echo Hello world\nMore\n")
+        sentinel = write_pending(str(note), instruction)
+
+        finalize_result(str(note), sentinel, instruction, "THE RESULT")
+
+        content = note.read_text()
+        assert sentinel not in content
+        assert "<!-- @done echo: Hello world" in content
+        assert "THE RESULT" in content
+        assert "/@done -->" in content
+        # Result lands where the instruction was, surrounding text preserved.
+        assert "# Title" in content
+        assert "More" in content
+
+    def test_finalize_result_appends_when_sentinel_removed(self, tmp_path):
+        """If the agent deleted the sentinel, the result is appended, not lost."""
+        note = tmp_path / "note.md"
+        instruction = self._instruction()
+        note.write_text("@echo Hello world\n")
+        write_pending(str(note), instruction)
+        sentinel = format_pending("echo", "Hello world")
+
+        # Agent rewrote the whole file, removing the sentinel.
+        note.write_text("Completely new content from the agent.\n")
+
+        finalize_result(str(note), sentinel, instruction, "THE RESULT")
+
+        content = note.read_text()
+        assert "Completely new content from the agent." in content
+        assert "<!-- @done echo: Hello world" in content
+        assert "THE RESULT" in content
+        assert "/@done -->" in content
+
+    def test_finalize_error_replaces_sentinel(self, tmp_path):
+        note = tmp_path / "note.md"
+        instruction = self._instruction()
+        note.write_text("@echo Hello world\n")
+        sentinel = write_pending(str(note), instruction)
+
+        finalize_error(str(note), sentinel, instruction, "Auth required")
+
+        content = note.read_text()
+        assert sentinel not in content
+        assert "<!-- @error echo: Hello world" in content
+        assert "Auth required" in content
+        assert "/@error -->" in content
+
+    def test_restore_instruction_puts_original_back(self, tmp_path):
+        note = tmp_path / "note.md"
+        instruction = self._instruction()
+        note.write_text("@echo Hello world\n")
+        sentinel = write_pending(str(note), instruction)
+
+        restore_instruction(str(note), sentinel, instruction)
+
+        content = note.read_text()
+        assert sentinel not in content
+        assert "@echo Hello world" in content
