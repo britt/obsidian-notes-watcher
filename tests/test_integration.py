@@ -11,7 +11,7 @@ import pytest
 from note_watcher.config import AgentConfig, Config
 from note_watcher.dispatcher import AgentDispatcher
 from note_watcher.parser import parse_instructions
-from note_watcher.watcher import process_file_reparse
+from note_watcher.watcher import process_file
 from note_watcher.writer import write_result
 
 
@@ -82,7 +82,7 @@ class TestEndToEnd:
             "@uppercase Second\n"
         )
 
-        count = process_file_reparse(str(note), dispatcher)
+        count = process_file(str(note), dispatcher)
         assert count == 2
 
         final = note.read_text()
@@ -99,14 +99,14 @@ class TestEndToEnd:
         note.write_text("@echo Process me once\n")
 
         # First run
-        count1 = process_file_reparse(str(note), dispatcher)
+        count1 = process_file(str(note), dispatcher)
         assert count1 == 1
 
         content_after_first = note.read_text()
         assert "<!-- @done echo: Process me once" in content_after_first
 
         # Second run - should find nothing to process
-        count2 = process_file_reparse(str(note), dispatcher)
+        count2 = process_file(str(note), dispatcher)
         assert count2 == 0
 
         # Content should be unchanged after second run
@@ -125,7 +125,7 @@ class TestEndToEnd:
             "@uppercase Process this new one\n"
         )
 
-        count = process_file_reparse(str(note), dispatcher)
+        count = process_file(str(note), dispatcher)
         assert count == 1
 
         final = note.read_text()
@@ -177,13 +177,13 @@ class TestEndToEnd:
         note.write_text("@echo Idempotent test\n")
 
         # Process three times
-        process_file_reparse(str(note), dispatcher)
+        process_file(str(note), dispatcher)
         content1 = note.read_text()
 
-        process_file_reparse(str(note), dispatcher)
+        process_file(str(note), dispatcher)
         content2 = note.read_text()
 
-        process_file_reparse(str(note), dispatcher)
+        process_file(str(note), dispatcher)
         content3 = note.read_text()
 
         # All should be identical
@@ -217,7 +217,7 @@ class TestEndToEnd:
             return result
 
         with patch.object(dispatcher, "dispatch", side_effect=modifying_dispatch):
-            count = process_file_reparse(str(note), dispatcher)
+            count = process_file(str(note), dispatcher)
 
         assert count == 2
 
@@ -254,7 +254,7 @@ class TestEndToEnd:
             return "AGENT_RESPONSE_TEXT"
 
         with patch.object(dispatcher, "dispatch", side_effect=rewriting_dispatch):
-            count = process_file_reparse(str(note), dispatcher)
+            count = process_file(str(note), dispatcher)
 
         final = note.read_text()
         # The agent's modifications are preserved.

@@ -1,6 +1,10 @@
 """Tests for the @ mention parser."""
 
-from note_watcher.parser import Instruction, parse_instructions
+from note_watcher.parser import (
+    Instruction,
+    parse_instructions,
+    parse_pending,
+)
 
 
 class TestParseInstructions:
@@ -179,3 +183,48 @@ class TestParseInstructions:
         )
         instructions = parse_instructions(content)
         assert instructions == []
+
+    def test_pending_sentinel_is_not_parsed_as_instruction(self) -> None:
+        """A tokened pending sentinel must not be treated as a live instruction."""
+        content = "<!-- note-watcher: processing [ab12cd34] @echo do something -->\n"
+        instructions = parse_instructions(content)
+        assert instructions == []
+
+
+class TestParsePending:
+    """Tests for parse_pending() — recovery of stale in-progress sentinels."""
+
+    def test_extracts_a_single_pending_sentinel(self) -> None:
+        content = (
+            "# Note\n"
+            "<!-- note-watcher: processing [ab12cd34] @echo do something -->\n"
+            "More text\n"
+        )
+        pending = parse_pending(content)
+        assert len(pending) == 1
+        assert pending[0].token == "ab12cd34"
+        assert pending[0].agent_name == "echo"
+        assert pending[0].instruction_text == "do something"
+        assert pending[0].line_number == 2
+
+    def test_extracts_multiple_pending_sentinels(self) -> None:
+        content = (
+            "<!-- note-watcher: processing [aaaa1111] @echo first task -->\n"
+            "\n"
+            "<!-- note-watcher: processing [bbbb2222] @uppercase second task -->\n"
+        )
+        pending = parse_pending(content)
+        assert len(pending) == 2
+        assert pending[0].token == "aaaa1111"
+        assert pending[0].instruction_text == "first task"
+        assert pending[1].token == "bbbb2222"
+        assert pending[1].agent_name == "uppercase"
+
+    def test_returns_empty_when_no_sentinels(self) -> None:
+        content = "# Note\n@echo not a sentinel\n<!-- @done echo: x\ny\n/@done -->\n"
+        assert parse_pending(content) == []
+
+    def test_preserves_sentinel_line_as_original_text(self) -> None:
+        line = "<!-- note-watcher: processing [ab12cd34] @echo do something -->"
+        pending = parse_pending(line + "\n")
+        assert pending[0].original_text == line

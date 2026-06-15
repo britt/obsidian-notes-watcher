@@ -16,7 +16,7 @@ import click
 from note_watcher.arcade_check import SERVICE_TOOLS, check_tokens
 from note_watcher.config import load_config
 from note_watcher.dispatcher import AgentDispatcher
-from note_watcher.watcher import process_file_reparse, start_watcher
+from note_watcher.watcher import process_file, start_watcher
 
 
 def setup_logging(verbose: bool = False) -> None:
@@ -109,7 +109,7 @@ def process(process_all: bool, vault: str | None, config_path: str | None) -> No
     total_processed = 0
 
     for md_file in md_files:
-        count = process_file_reparse(str(md_file), dispatcher)
+        count = process_file(str(md_file), dispatcher)
         if count > 0:
             click.echo(f"Processed {count} instruction(s) in {md_file}")
             total_processed += count
