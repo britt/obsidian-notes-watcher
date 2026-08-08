@@ -2,7 +2,7 @@
 
 A tool that detects `@` mentions in Obsidian markdown notes stored in Git and dispatches each instruction to configured agents — like [Claude Code](https://docs.anthropic.com/en/docs/claude-code) — that can read, modify, and reorganize your notes directly.
 
-Write `@agent_name do something` in any note, and Note Watcher claims every known instruction before dispatch. It processes all mentions in a note in one run, so multi-`@agent` notes finish together instead of leaving later instructions behind. Each item ends inline with an HTML comment marker such as `@done` or `@error`, so the note records the result where it started:
+Write `@agent_name do something` in any note, and Note Watcher processes all mentions in a note in one run, so multi-`@agent` notes finish together instead of leaving later instructions behind. Each item ends inline with an HTML comment marker such as `@done` or `@error`, so the note records the result where it started:
 
 ```markdown
 <!-- @done agent_name: do something
