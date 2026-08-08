@@ -3,7 +3,9 @@
 Date: 2026-08-08
 Version: 0.4.4
 
-This release strengthens timeout handling in note processing and keeps the default action and package version aligned with the published release.
+## Summary
+
+This release improves timeout handling in note processing and keeps the default action and package version aligned with release 0.4.4.
 
 ## Bug Fixes
 
