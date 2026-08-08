@@ -9,10 +9,10 @@ jobs:
   process:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - uses: anthropics/anthropic-cookbook/.github/actions/claude-code@main
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-      - uses: britt/obsidian-note-watcher@main
+      - uses: britt/obsidian-notes-watcher@main
         with:
           vault: '.'
