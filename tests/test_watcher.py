@@ -1,5 +1,6 @@
 """Tests for the file watcher module."""
 
+import subprocess
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -9,7 +10,7 @@ from note_watcher.config import AgentConfig, Config
 from note_watcher.dispatcher import AgentDispatcher
 from note_watcher.parser import parse_instructions
 from note_watcher.result_validator import AuthFailureError
-from note_watcher.watcher import NoteEventHandler, process_file
+from note_watcher.watcher import AgentTimeoutError, NoteEventHandler, process_file
 
 
 @pytest.fixture
@@ -241,6 +242,50 @@ class TestProcessFile:
         assert "boom" in content
         assert "note-watcher: processing" not in content
         assert "@echo do a thing" not in content
+
+    def test_timeout_writes_error_marker_and_raises(
+        self, tmp_path: Path, dispatcher: AgentDispatcher
+    ) -> None:
+        """A subprocess timeout writes an @error marker and fails the run."""
+        note = tmp_path / "note.md"
+        note.write_text("@echo do a thing\n")
+
+        with patch.object(
+            dispatcher,
+            "dispatch",
+            side_effect=subprocess.TimeoutExpired(cmd="claude", timeout=900),
+        ):
+            with pytest.raises(AgentTimeoutError) as exc_info:
+                process_file(str(note), dispatcher)
+
+        assert exc_info.value.count == 1
+        content = note.read_text()
+        assert "<!-- @error echo: do a thing" in content
+        assert "timed out" in content.lower()
+        assert "/@error -->" in content
+
+    def test_timeout_does_not_abort_later_instructions(
+        self, tmp_path: Path, dispatcher: AgentDispatcher
+    ) -> None:
+        """A timeout on one instruction must not abort the rest in the file."""
+        note = tmp_path / "note.md"
+        note.write_text("@echo first\n\n@uppercase second\n")
+
+        original_dispatch = dispatcher.dispatch
+
+        def side_effect(instruction, **kwargs):
+            if instruction.agent_name == "echo":
+                raise subprocess.TimeoutExpired(cmd="claude", timeout=900)
+            return original_dispatch(instruction, **kwargs)
+
+        with patch.object(dispatcher, "dispatch", side_effect=side_effect):
+            with pytest.raises(AgentTimeoutError) as exc_info:
+                process_file(str(note), dispatcher)
+
+        assert exc_info.value.count == 2
+        content = note.read_text()
+        assert "<!-- @error echo: first" in content
+        assert "<!-- @done uppercase: second" in content
 
     def test_pending_write_failure_skips_instruction(
         self, tmp_path: Path, dispatcher: AgentDispatcher
