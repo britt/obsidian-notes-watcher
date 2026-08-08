@@ -9,6 +9,7 @@ from __future__ import annotations
 import fnmatch
 import logging
 import signal
+import subprocess
 import time
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -36,6 +37,27 @@ if TYPE_CHECKING:
     from note_watcher.config import Config
 
 logger = logging.getLogger(__name__)
+
+
+class AgentTimeoutError(Exception):
+    """Raised by process_file after one or more instructions time out.
+
+    All instructions in the file are still dispatched and finalized (with
+    @error markers for the ones that timed out) before this is raised, so no
+    work is lost. Callers should treat this as a failed run.
+    """
+
+    def __init__(self, count: int) -> None:
+        """Initialize with the total number of instructions processed.
+
+        Args:
+            count: Number of instructions processed in the file, including
+                the ones that timed out.
+        """
+        self.count = count
+        super().__init__(
+            f"{count} instruction(s) processed but one or more timed out"
+        )
 
 
 class NoteEventHandler(FileSystemEventHandler):
@@ -141,6 +163,11 @@ def process_file(file_path: str, dispatcher: AgentDispatcher) -> int:
 
     Returns:
         Number of instructions processed (including those recorded as errors).
+
+    Raises:
+        AgentTimeoutError: If any instruction's agent timed out. Raised only
+            after every instruction in the file has been dispatched and
+            finalized.
     """
     path = Path(file_path)
     if not path.exists():
@@ -170,6 +197,7 @@ def process_file(file_path: str, dispatcher: AgentDispatcher) -> int:
     )
 
     processed = 0
+    timed_out = False
     for sentinel, instruction in worklist:
         logger.info(
             "Dispatching @%s: %s",
@@ -196,12 +224,24 @@ def process_file(file_path: str, dispatcher: AgentDispatcher) -> int:
                 instruction,
                 f"Unknown agent: {instruction.agent_name!r}",
             )
+        except subprocess.TimeoutExpired as e:
+            logger.error("Timeout for @%s: %s", instruction.agent_name, e)
+            timed_out = True
+            finalize_error(
+                file_path,
+                sentinel,
+                instruction,
+                f"Agent timed out after {e.timeout}s",
+            )
         except Exception as e:
             logger.error("Error processing @%s: %s", instruction.agent_name, e)
             finalize_error(
                 file_path, sentinel, instruction, f"Unexpected error: {e}"
             )
         processed += 1
+
+    if timed_out:
+        raise AgentTimeoutError(processed)
 
     return processed
 
@@ -220,7 +260,12 @@ def start_watcher(config: Config) -> None:
     dispatcher = AgentDispatcher(config)
 
     def on_file_changed(file_path: str) -> None:
-        process_file(file_path, dispatcher)
+        try:
+            process_file(file_path, dispatcher)
+        except AgentTimeoutError as e:
+            # The daemon keeps watching; the @error marker already written
+            # by process_file is the durable record of the timeout.
+            logger.error("%s: %s", file_path, e)
 
     debouncer = Debouncer(
         interval=config.debounce_seconds,

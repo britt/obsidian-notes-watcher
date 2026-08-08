@@ -16,7 +16,7 @@ import click
 from note_watcher.arcade_check import SERVICE_TOOLS, check_tokens
 from note_watcher.config import load_config
 from note_watcher.dispatcher import AgentDispatcher
-from note_watcher.watcher import process_file, start_watcher
+from note_watcher.watcher import AgentTimeoutError, process_file, start_watcher
 
 
 def setup_logging(verbose: bool = False) -> None:
@@ -107,14 +107,23 @@ def process(process_all: bool, vault: str | None, config_path: str | None) -> No
     # Find all .md files
     md_files = sorted(vault_path.rglob("*.md"))
     total_processed = 0
+    had_timeout = False
 
     for md_file in md_files:
-        count = process_file(str(md_file), dispatcher)
+        try:
+            count = process_file(str(md_file), dispatcher)
+        except AgentTimeoutError as e:
+            had_timeout = True
+            count = e.count
+            click.echo(f"Timeout in {md_file}: {e}", err=True)
         if count > 0:
             click.echo(f"Processed {count} instruction(s) in {md_file}")
             total_processed += count
 
     click.echo(f"Done. Processed {total_processed} instruction(s) total.")
+
+    if had_timeout:
+        sys.exit(1)
 
 
 @main.command("check-arcade")
