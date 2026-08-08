@@ -2,7 +2,7 @@
 
 A tool that detects `@` mentions in Obsidian markdown notes stored in Git and dispatches instructions to configured agents — like [Claude Code](https://docs.anthropic.com/en/docs/claude-code) — that can read, modify, and reorganize your notes directly.
 
-Write `@agent_name do something` in any note, and Note Watcher dispatches the instruction to the named agent. The agent can edit files, create new notes, restructure content, or make any other changes to your vault. The original instruction is then replaced with a completion marker (an HTML comment, invisible in rendered markdown) so it is never reprocessed:
+Write `@agent_name do something` in any note, and Note Watcher dispatches the instruction to the named agent. The agent can edit files, create new notes, restructure content, or make any other changes to your vault. Successful processing replaces the original instruction with an `@done` completion marker in an HTML comment, and a command agent that exceeds its timeout writes an `@error` marker instead:
 
 ```markdown
 <!-- @done agent_name: do something
@@ -10,7 +10,7 @@ Agent response summary goes here.
 /@done -->
 ```
 
-The real work happens in the commit: the agent's changes to your vault are committed back to Git. The completion comment is just a record that the instruction was processed.
+The commit contains the agent's changes to your vault. The completion comment records success, and an `@error` comment records a timeout failure.
 
 ## Modes of Operation
 
@@ -74,6 +74,8 @@ agents:
     type: command
     command: "wc -w"  # Runs a shell command, passes instruction via stdin
 ```
+
+Command agents accept a `timeout` value in seconds. Note Watcher uses `900` seconds by default when the setting is omitted.
 
 ### Agent types
 
@@ -176,6 +178,8 @@ note-watcher -v watch --vault ~/Obsidian/MyVault
 
 Stop the daemon with `Ctrl+C` (`SIGINT`) or `SIGTERM`.
 
+If a command agent exceeds its timeout, Note Watcher writes an `@error` marker, logs the timeout, and keeps the watcher running. The daemon does not stop on a timeout.
+
 ### Installing as a macOS LaunchAgent
 
 The included install script sets up Note Watcher as a LaunchAgent that starts on login and restarts on crash:
@@ -214,6 +218,8 @@ GitHub Action mode processes all pending `@` instructions across the entire vaul
 ```bash
 note-watcher process --all --vault /path/to/vault
 ```
+
+If a command agent times out in `note-watcher process --all`, Note Watcher continues on to later files, leaves an `@error` marker in the timed-out note, and exits with a non-zero status when any timeout occurs.
 
 ### Setting up the GitHub Actions workflow
 
