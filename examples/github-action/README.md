@@ -27,7 +27,7 @@ When you push changes to `.md` files, the workflow:
 | `vault` | `.` | Path to the Obsidian vault (relative to repo root) |
 | `config` | `config.yml` | Path to the Note Watcher config file |
 | `python-version` | `3.11` | Python version to use |
-| `version` | latest | Note Watcher package version to install |
+| `version` | matches the action release | Note Watcher package version to install; use `latest` to track the newest release |
 | `commit` | `true` | Whether to commit and push results automatically |
 | `commit-message` | `Process note instructions [skip ci]` | Commit message to use |
 

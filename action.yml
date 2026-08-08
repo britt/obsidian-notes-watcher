@@ -20,9 +20,9 @@ inputs:
     required: false
     default: '3.11'
   version:
-    description: 'notes-watcher package version to install (e.g. "0.1.0"). Defaults to latest.'
+    description: 'notes-watcher package version to install (e.g. "0.1.0"). Defaults to the version matching this action release; use "latest" to always install the newest release.'
     required: false
-    default: ''
+    default: '0.4.3'
   commit:
     description: 'Whether to commit and push results automatically'
     required: false
@@ -44,10 +44,10 @@ runs:
       env:
         VERSION: ${{ inputs.version }}
       run: |
-        if [ -n "$VERSION" ]; then
-          pip install "notes-watcher==$VERSION"
-        else
+        if [ -z "$VERSION" ] || [ "$VERSION" = "latest" ]; then
           pip install notes-watcher
+        else
+          pip install "notes-watcher==$VERSION"
         fi
 
     - name: Process notes
