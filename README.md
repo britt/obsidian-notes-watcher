@@ -237,6 +237,23 @@ concurrency:
 
 The workflow triggers on any push that modifies `.md` files, processes all unprocessed `@` instructions, and commits the agent's changes back to your repository. It uses `[skip ci]` to prevent infinite loops.
 
+### Upgrading an existing installation to fix overlapping-push failures
+
+If you installed this workflow before the `concurrency` block above was added, a push with an `@mention` that lands while an earlier `@mention` push is still processing can make the later run fail (issue #28). To fix an existing installation:
+
+1. Open the workflow file you copied into your notes repository (e.g. `.github/workflows/note-watcher.yml`).
+2. Add the `concurrency` block shown above, at the top level of the workflow (alongside `on:` and `permissions:`, not inside `jobs:`):
+   ```yaml
+   concurrency:
+     group: note-watcher-${{ github.ref }}
+     cancel-in-progress: false
+   ```
+   This part only lives in your own workflow file — the action can't set it on your behalf — so it always requires this manual edit, no matter how you reference the action below.
+3. Check how your workflow references the action:
+   - `uses: britt/obsidian-notes-watcher@main` — no further action needed. The other half of the fix (resyncing before processing) lives in `action.yml` itself and takes effect automatically on your next run once it's merged to `main`.
+   - `uses: britt/obsidian-notes-watcher@v0.4.x` (or any other pinned tag/SHA) — bump the pin to a release that includes this fix (v0.4.5 or later) once one is published.
+4. Commit and push the workflow change. No config or vault changes are needed.
+
 See the [Claude Code GitHub Actions documentation](https://docs.anthropic.com/en/docs/claude-code/github-actions) for more on setting up Claude Code in CI.
 
 ## Arcade MCP Integration
