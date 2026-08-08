@@ -15,7 +15,7 @@ When you push changes to `.md` files, the workflow:
 
 1. Checks out your repository
 2. Sets up Claude Code (only needed for the Claude agent in this example)
-3. Runs the `britt/obsidian-note-watcher` action, which installs Note Watcher and processes all unprocessed `@` instructions
+3. Runs the `britt/obsidian-notes-watcher` action, which installs Note Watcher and processes all unprocessed `@` instructions
 4. The agent (e.g. Claude Code) can read, edit, create, and reorganize notes across your vault — not just reply in a comment
 5. All changes are committed and pushed back to your repository
 6. Uses `[skip ci]` to prevent infinite workflow loops
@@ -27,7 +27,7 @@ When you push changes to `.md` files, the workflow:
 | `vault` | `.` | Path to the Obsidian vault (relative to repo root) |
 | `config` | `config.yml` | Path to the Note Watcher config file |
 | `python-version` | `3.11` | Python version to use |
-| `version` | latest | Note Watcher package version to install |
+| `version` | matches the action release | Note Watcher package version to install; use `latest` to track the newest release |
 | `commit` | `true` | Whether to commit and push results automatically |
 | `commit-message` | `Process note instructions [skip ci]` | Commit message to use |
 
