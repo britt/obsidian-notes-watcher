@@ -15,8 +15,8 @@ When you push changes to `.md` files, the workflow:
 
 1. Checks out your repository
 2. Sets up Claude Code (only needed for the Claude agent in this example)
-3. Runs the `britt/obsidian-notes-watcher` action, which installs the Note Watcher package release that matches the action release by default; set `latest` to keep the unpinned install behavior and always use the newest release
-4. The action processes all unprocessed `@` instructions in one run, writes each result inline, and leaves completed instructions alone on reruns
+3. Runs the `britt/obsidian-notes-watcher` action. By default, it installs the Note Watcher package release that matches the action release; set `latest` to keep the unpinned install behavior and always use the newest release
+4. The action processes all unprocessed `@` instructions in one run, writes each result inline, and leaves completed instructions alone on later runs
 5. The agent (e.g. Claude Code) can read, edit, create, and reorganize notes across your vault — not just reply in a comment
 6. All changes are committed and pushed back to your repository
 7. Uses `[skip ci]` to prevent infinite workflow loops
@@ -65,7 +65,7 @@ Write `@claude` instructions in your notes:
 @claude Summarize the key points of this meeting and add action items to my Tasks note
 ```
 
-After the workflow runs, Note Watcher edits your vault in place, handles every unprocessed instruction in one pass, and leaves completed instructions alone on reruns. Notes with more than one `@` instruction finish in the same run, and a later run resumes any pending instruction or finalizes it without repeating finished work.
+After the workflow runs, Note Watcher edits your vault in place, handles every unprocessed instruction in one pass, and leaves completed instructions alone on later runs. A note with more than one `@` instruction finishes in the same run, and a rerun resumes any pending instruction or finalizes it without repeating finished work.
 
 ```markdown
 <!-- @done claude: Summarize the key points of this meeting and add action items to my Tasks note
