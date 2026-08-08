@@ -2,7 +2,7 @@
 
 A tool that detects `@` mentions in Obsidian markdown notes stored in Git and dispatches each instruction to configured agents — like [Claude Code](https://docs.anthropic.com/en/docs/claude-code) — that can read, modify, and reorganize your notes directly.
 
-Write `@agent_name do something` in any note, and Note Watcher claims every known instruction before dispatch. It processes all mentions in a note in one run, so multi-`@agent` notes finish together instead of leaving later instructions behind. Each item ends inline with an HTML comment marker such as `@done` or `@error`, and tokenized pending sentinels let interrupted runs recover unfinished work on the next pass:
+Write `@agent_name do something` in any note, and Note Watcher claims every known instruction before dispatch. It processes all mentions in a note in one run, so multi-`@agent` notes finish together instead of leaving later instructions behind. Each item ends inline with an HTML comment marker such as `@done` or `@error`, so the note records the result where it started:
 
 ```markdown
 <!-- @done agent_name: do something
@@ -10,7 +10,7 @@ Agent response summary goes here.
 /@done -->
 ```
 
-The agent's changes to your vault are committed back to Git, and the HTML comment markers keep reruns idempotent.
+The agent commits its changes back to Git.
 
 ## Modes of Operation
 
@@ -210,7 +210,7 @@ To also remove the log directory:
 
 ## GitHub Action Mode
 
-GitHub Action mode processes all pending `@` instructions across the entire vault in a single run. It claims every known instruction before dispatch, so multi-mention notes complete together instead of stopping after the first failure. Each completed instruction becomes an inline `@done` comment, each failed instruction becomes an inline `@error` comment, and reruns stay safe because pending work returns from tokenized sentinels after interruptions. This is useful for vaults stored in a Git repository.
+GitHub Action mode processes all pending `@` instructions across the entire vault in a single run. It claims every known instruction before dispatch, so multi-mention notes complete together instead of stopping after the first failure. Tokenized pending sentinels let interrupted runs recover unfinished work on the next pass, so reruns stay safe and idempotent. Each completed instruction becomes an inline `@done` comment, and each failed instruction becomes an inline `@error` comment. This is useful for vaults stored in a Git repository.
 
 ### CLI usage
 
@@ -228,9 +228,9 @@ To set it up:
 2. Add a `config.yml` to your notes repo (see `examples/github-action/config.example.yml`)
 3. Add your `ANTHROPIC_API_KEY` as a repository secret
 
-The example workflow already includes `permissions: contents: write`, which is required for the action to push processed results back to your repository. If you write your own workflow, make sure to include this permission block.
+The example workflow already includes `permissions: contents: write`. That permission block lets the action push processed results back to the repository. Custom workflows need the same permission block.
 
-The workflow triggers on any push that modifies `.md` files, processes all unprocessed `@` instructions, and commits the agent's changes back to your repository. It uses `[skip ci]` to prevent infinite loops.
+The workflow triggers on any push that modifies `.md` files, processes all unprocessed `@` instructions, and commits the agent's changes back to the repository. It uses `[skip ci]` to prevent infinite loops.
 
 The repository also includes `.github/workflows/sync-issues-to-project.yml`, which backfills open issues into Projects v2 project 13 and keeps opened or reopened issues in sync with that project.
 
