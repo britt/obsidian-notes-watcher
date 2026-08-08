@@ -55,7 +55,11 @@ runs:
       env:
         CONFIG: ${{ inputs.config }}
         VAULT: ${{ inputs.vault }}
-      run: note-watcher process --all --config "$CONFIG" --vault "$VAULT"
+      run: |
+        # Sync to the branch tip (checkout pins to the triggering SHA) so a run
+        # queued behind another doesn't reprocess instructions it already committed.
+        git pull --ff-only
+        note-watcher process --all --config "$CONFIG" --vault "$VAULT"
 
     - name: Commit results
       if: inputs.commit == 'true'

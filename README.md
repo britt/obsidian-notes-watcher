@@ -227,6 +227,14 @@ To set it up:
 
 The example workflow already includes `permissions: contents: write`, which is required for the action to push processed results back to your repository. If you write your own workflow, make sure to include this permission block.
 
+The example workflow also includes a `concurrency` group keyed on the branch, with `cancel-in-progress: false`. This queues runs triggered by rapid, overlapping pushes instead of letting them race to commit at the same time — without it, a push that lands while a prior run is still processing can make that later run's commit fail. If you write your own workflow, include this too:
+
+```yaml
+concurrency:
+  group: note-watcher-${{ github.ref }}
+  cancel-in-progress: false
+```
+
 The workflow triggers on any push that modifies `.md` files, processes all unprocessed `@` instructions, and commits the agent's changes back to your repository. It uses `[skip ci]` to prevent infinite loops.
 
 See the [Claude Code GitHub Actions documentation](https://docs.anthropic.com/en/docs/claude-code/github-actions) for more on setting up Claude Code in CI.
