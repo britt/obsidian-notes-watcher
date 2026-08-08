@@ -9,7 +9,7 @@ jobs:
   coverage:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: actions/setup-python@v6
         with:
           python-version: '3.13'
@@ -17,7 +17,7 @@ jobs:
       - name: Run tests with coverage
         run: pytest --cov=note_watcher --cov-report=term --cov-report=markdown:coverage.md
       - name: Post coverage comment
-        uses: marocchino/sticky-pull-request-comment@v2
+        uses: marocchino/sticky-pull-request-comment@v3
         with:
           header: coverage
           path: coverage.md
