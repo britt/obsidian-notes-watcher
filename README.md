@@ -2,7 +2,7 @@
 
 A tool that detects `@` mentions in Obsidian markdown notes stored in Git and dispatches instructions to configured agents — like [Claude Code](https://docs.anthropic.com/en/docs/claude-code) — that can read, modify, and reorganize your notes directly.
 
-Write `@agent_name do something` in any note, and Note Watcher dispatches the instruction to the named agent. The agent can edit files, create new notes, restructure content, or make any other changes to your vault. Successful processing replaces the original instruction with an `@done` completion marker in an HTML comment, and a command agent that exceeds its timeout writes an `@error` marker instead:
+Write `@agent_name do something` in any note, and Note Watcher dispatches the instruction to the named agent. The agent can edit files, create new notes, restructure content, or make any other changes to your vault. Successful processing replaces the original instruction with an `@done` completion marker in an HTML comment. When a command agent reaches its configured timeout, Note Watcher writes an `@error` marker and keeps processing the remaining instructions in that file:
 
 ```markdown
 <!-- @done agent_name: do something
@@ -10,7 +10,7 @@ Agent response summary goes here.
 /@done -->
 ```
 
-The commit contains the agent's changes to your vault. The completion comment records success, and an `@error` comment records a timeout failure.
+The commit contains the agent's changes to your vault. The completion comment records success, and an `@error` comment records the timeout failure.
 
 ## Modes of Operation
 
@@ -75,7 +75,7 @@ agents:
     command: "wc -w"  # Runs a shell command, passes instruction via stdin
 ```
 
-Command agents accept a `timeout` value in seconds. Note Watcher uses `900` seconds by default when the setting is omitted.
+Each command agent accepts a `timeout` value in seconds. Note Watcher uses `900` seconds by default when the setting is omitted.
 
 ### Agent types
 
