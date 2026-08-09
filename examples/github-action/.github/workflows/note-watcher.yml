@@ -5,6 +5,9 @@ on:
       - '**.md'
 permissions:
   contents: write
+concurrency:
+  group: note-watcher-${{ github.ref }}
+  cancel-in-progress: false
 jobs:
   process:
     runs-on: ubuntu-latest

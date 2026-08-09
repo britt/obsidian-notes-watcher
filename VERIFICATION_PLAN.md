@@ -137,6 +137,26 @@
 
 **If Blocked**: Verify the command agent actually modifies the file during dispatch. Check that `_replace_instruction_line` falls back to text-based search when line numbers shift.
 
+### Scenario 7: Overlapping GitHub Action Runs Don't Fail (Issue #28)
+
+**Context**: A real notes repository on GitHub with the example workflow (`examples/github-action/.github/workflows/note-watcher.yml`) installed, `ANTHROPIC_API_KEY` configured, and a real `command` agent (e.g. Claude Code) that modifies the note file. This requires live GitHub Actions infrastructure and is performed manually by a developer with push access to such a repo (see Scenario 3/6 for the same real-infra constraint).
+
+**Steps**:
+1. Push a commit adding `@claude first task` to a tracked `.md` file.
+2. While the resulting Action run is still in progress (check the Actions tab), push a second commit adding `@claude second task` to the same file.
+3. Wait for both Action runs to complete.
+4. Read the file and check both run's conclusions in the Actions tab.
+
+**Success Criteria**:
+- [ ] Both Action runs conclude successfully (no red X on either run)
+- [ ] The second run's job was queued behind the first (Actions tab shows it waiting, not executing concurrently) rather than being cancelled
+- [ ] Both `@claude` instructions end up replaced with `<!-- @done ... /@done -->` markers
+- [ ] The first run's in-progress work was not abandoned or duplicated by the second run
+
+**If Blocked**: Ask developer for a test repository with GitHub Actions and `ANTHROPIC_API_KEY` configured.
+
+**Local simulation (automatable, no live Actions needed)**: Since spinning up real overlapping Action runs isn't possible in this environment, the underlying git race that causes the failure was reproduced and fixed locally with two real git clones racing to commit and push conflicting edits to the same lines of a shared bare remote — see the verification log for command output. This exercises the exact `git pull --rebase` / push failure mode described in the issue without needing live GitHub Actions infrastructure.
+
 ## Verification Rules
 
 - Never use mocks or fakes
