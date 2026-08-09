@@ -22,7 +22,7 @@ inputs:
   version:
     description: 'notes-watcher package version to install (e.g. "0.1.0"). Defaults to the version matching this action release; use "latest" to always install the newest release.'
     required: false
-    default: '0.4.4'
+    default: '0.4.5'
   commit:
     description: 'Whether to commit and push results automatically'
     required: false
