@@ -64,6 +64,67 @@ class TestProcessCommand:
         result = runner.invoke(main, ["process"])
         assert result.exit_code != 0
 
+    def test_process_exits_nonzero_on_agent_timeout(
+        self, runner: CliRunner, tmp_path: Path
+    ) -> None:
+        """Process command fails the run when an agent times out."""
+        note = tmp_path / "test.md"
+        note.write_text("@slow do something slow\n")
+
+        config_file = tmp_path / "config.yml"
+        config_file.write_text(
+            f"vault: {tmp_path}\n"
+            "agents:\n"
+            "  slow:\n"
+            "    type: command\n"
+            "    command: \"sleep 2 && echo done\"\n"
+            "    timeout: 1\n"
+        )
+
+        result = runner.invoke(
+            main,
+            ["process", "--all", "--vault", str(tmp_path), "--config", str(config_file)],
+        )
+
+        assert result.exit_code != 0
+        assert result.exception is None or isinstance(result.exception, SystemExit)
+        content = note.read_text()
+        assert "<!-- @error slow: do something slow" in content
+        assert "timed out" in content.lower()
+
+    def test_process_continues_other_files_after_timeout(
+        self, runner: CliRunner, tmp_path: Path
+    ) -> None:
+        """A timeout in one file must not stop later files from processing."""
+        slow_note = tmp_path / "a_slow.md"
+        slow_note.write_text("@slow do something slow\n")
+        fast_note = tmp_path / "b_fast.md"
+        fast_note.write_text("@fast hello world\n")
+
+        config_file = tmp_path / "config.yml"
+        config_file.write_text(
+            f"vault: {tmp_path}\n"
+            "agents:\n"
+            "  slow:\n"
+            "    type: command\n"
+            "    command: \"sleep 2 && echo done\"\n"
+            "    timeout: 1\n"
+            "  fast:\n"
+            "    type: uppercase\n"
+        )
+
+        result = runner.invoke(
+            main,
+            [
+                "process", "--all",
+                "--vault", str(tmp_path),
+                "--config", str(config_file),
+            ],
+        )
+
+        assert result.exit_code != 0
+        assert "<!-- @done fast: hello world" in fast_note.read_text()
+
 
 class TestWatchCommand:
     """Tests for the 'watch' CLI command."""

@@ -5,6 +5,7 @@ Wraps results in completed markers to prevent reprocessing.
 
 from __future__ import annotations
 
+import uuid
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -44,6 +45,84 @@ def format_error(agent_name: str, instruction_text: str, reason: str) -> str:
     return f"<!-- @error {agent_name}: {instruction_text}\n{reason}\n/@error -->"
 
 
+def format_pending(agent_name: str, instruction_text: str, token: str) -> str:
+    """Format a pending marker written in place of an instruction while it runs.
+
+    The marker is intentionally parser-neutral (it is not a @done, @error, or
+    @agent line) so the parser ignores it, and it carries a unique token plus
+    the agent name and instruction text so the exact sentinel can be located
+    again after dispatch and recovered if a run crashes mid-flight.
+
+    Args:
+        agent_name: Name of the agent that is processing the instruction.
+        instruction_text: The original instruction text from the @ mention.
+        token: A unique token disambiguating this sentinel from any other.
+
+    Returns:
+        A single-line HTML comment sentinel.
+    """
+    return (
+        f"<!-- note-watcher: processing [{token}] "
+        f"@{agent_name} {instruction_text} -->"
+    )
+
+
+def _replace_line(
+    file_path: str | Path,
+    target_text: str,
+    replacement: str,
+    line_number_hint: int | None = None,
+    append_if_missing: bool = False,
+) -> None:
+    """Replace a single line matching ``target_text`` with ``replacement``.
+
+    First attempts a line-number match (fast path) when a hint is given. If the
+    file has been modified since parsing (e.g., by an agent during dispatch),
+    falls back to searching for the target text on any line.
+
+    Args:
+        file_path: Path to the markdown file.
+        target_text: The exact (stripped) line text to replace.
+        replacement: The text to replace the matched line with.
+        line_number_hint: Optional 1-indexed line to check first.
+        append_if_missing: If True, append the replacement at the end of the
+            file when no matching line is found instead of raising.
+
+    Raises:
+        ValueError: If the target text is not found and ``append_if_missing``
+            is False.
+    """
+    path = Path(file_path)
+    content = path.read_text()
+    lines = content.split("\n")
+
+    target = target_text.strip()
+
+    # Fast path: check the hinted line number.
+    if line_number_hint is not None:
+        idx = line_number_hint - 1
+        if 0 <= idx < len(lines) and lines[idx].strip() == target:
+            lines[idx] = replacement
+            path.write_text("\n".join(lines))
+            return
+
+    # Fallback: search all lines for the target text.
+    for i, line in enumerate(lines):
+        if line.strip() == target:
+            lines[i] = replacement
+            path.write_text("\n".join(lines))
+            return
+
+    if append_if_missing:
+        # The line is gone (an agent rewrote it away). Append the replacement
+        # at the end of the file so the result is never lost.
+        prefix = content if content.endswith("\n") or content == "" else content + "\n"
+        path.write_text(prefix + replacement + "\n")
+        return
+
+    raise ValueError(f"Instruction {target!r} not found in file {file_path}")
+
+
 def _replace_instruction_line(
     file_path: str | Path,
     instruction: Instruction,
@@ -55,28 +134,16 @@ def _replace_instruction_line(
         file_path: Path to the markdown file.
         instruction: The original instruction that was processed.
         replacement: The formatted text to replace the instruction line.
+
+    Raises:
+        ValueError: If the instruction text is not found anywhere in the file.
     """
-    path = Path(file_path)
-    content = path.read_text()
-    lines = content.split("\n")
-
-    line_idx = instruction.line_number - 1
-
-    if line_idx < 0 or line_idx >= len(lines):
-        raise IndexError(
-            f"Instruction line {instruction.line_number} out of range "
-            f"(file has {len(lines)} lines)"
-        )
-
-    if lines[line_idx].strip() != instruction.original_text.strip():
-        raise ValueError(
-            f"Line {instruction.line_number} has changed since parsing. "
-            f"Expected: {instruction.original_text.strip()!r}, "
-            f"Got: {lines[line_idx].strip()!r}"
-        )
-
-    lines[line_idx] = replacement
-    path.write_text("\n".join(lines))
+    _replace_line(
+        file_path,
+        instruction.original_text,
+        replacement,
+        line_number_hint=instruction.line_number,
+    )
 
 
 def write_result(
@@ -113,3 +180,71 @@ def write_error(
         instruction.agent_name, instruction.instruction_text, reason
     )
     _replace_instruction_line(file_path, instruction, formatted)
+
+
+def write_pending(file_path: str | Path, instruction: Instruction) -> str:
+    """Replace an instruction with a pending sentinel before dispatch.
+
+    This is done *before* the agent runs, while the instruction line is still
+    guaranteed to be present. The returned sentinel is later swapped for the
+    final result or error marker, which is robust even if the agent rewrites
+    the surrounding note content (issue #12).
+
+    Args:
+        file_path: Path to the markdown file.
+        instruction: The instruction about to be dispatched.
+
+    Returns:
+        The sentinel string written into the file (with its unique token).
+    """
+    token = uuid.uuid4().hex[:8]
+    sentinel = format_pending(
+        instruction.agent_name, instruction.instruction_text, token
+    )
+    _replace_instruction_line(file_path, instruction, sentinel)
+    return sentinel
+
+
+def finalize_result(
+    file_path: str | Path,
+    sentinel: str,
+    instruction: Instruction,
+    result: str,
+) -> None:
+    """Replace a pending sentinel with the agent's completed result marker.
+
+    Falls back to appending at the end of the file if the agent removed the
+    sentinel during dispatch, so the result is never lost.
+
+    Args:
+        file_path: Path to the markdown file.
+        sentinel: The sentinel previously written by ``write_pending``.
+        instruction: The original instruction that was processed.
+        result: The agent's output text.
+    """
+    formatted = format_result(
+        instruction.agent_name, instruction.instruction_text, result
+    )
+    _replace_line(file_path, sentinel, formatted, append_if_missing=True)
+
+
+def finalize_error(
+    file_path: str | Path,
+    sentinel: str,
+    instruction: Instruction,
+    reason: str,
+) -> None:
+    """Replace a pending sentinel with an error marker.
+
+    Falls back to appending at the end of the file if the sentinel is gone.
+
+    Args:
+        file_path: Path to the markdown file.
+        sentinel: The sentinel previously written by ``write_pending``.
+        instruction: The original instruction that failed.
+        reason: The reason for the error.
+    """
+    formatted = format_error(
+        instruction.agent_name, instruction.instruction_text, reason
+    )
+    _replace_line(file_path, sentinel, formatted, append_if_missing=True)

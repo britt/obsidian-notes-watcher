@@ -333,6 +333,26 @@ class TestCommandAgentEnvVars:
         # Should instruct agent to default to the same note
         assert "same note" in result.lower() or "that note" in result.lower()
 
+    def test_default_prompt_warns_against_editing_markers(self, tmp_path) -> None:
+        """The default prompt tells the agent to leave HTML comment markers."""
+        config = Config(
+            vault=tmp_path,
+            agents={
+                "env_agent": AgentConfig(
+                    name="env_agent",
+                    type="command",
+                    command="printenv NOTE_WATCHER_SYSTEM_PROMPT",
+                ),
+            },
+        )
+        dispatcher = AgentDispatcher(config)
+        result = dispatcher.dispatch(
+            _make_instruction("env_agent"), file_path="/tmp/notes/test.md"
+        )
+        lowered = result.lower()
+        assert "<!--" in result
+        assert "intact" in lowered or "do not" in lowered or "leave" in lowered
+
     def test_default_prompt_env_always_set(self, tmp_path) -> None:
         """NOTE_WATCHER_SYSTEM_PROMPT env var is always set."""
         config = Config(

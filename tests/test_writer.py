@@ -2,8 +2,17 @@
 
 import pytest
 
-from note_watcher.parser import Instruction
-from note_watcher.writer import format_error, format_result, write_error, write_result
+from note_watcher.parser import Instruction, parse_instructions, parse_pending
+from note_watcher.writer import (
+    finalize_error,
+    finalize_result,
+    format_error,
+    format_pending,
+    format_result,
+    write_error,
+    write_pending,
+    write_result,
+)
 
 
 class TestFormatResult:
@@ -83,7 +92,7 @@ class TestWriteResult:
             original_text="@agent Original",
         )
 
-        with pytest.raises(ValueError, match="has changed"):
+        with pytest.raises(ValueError, match="not found in file"):
             write_result(str(note), instruction, "Result")
 
     def test_raises_on_out_of_range_line(self, tmp_path) -> None:
@@ -97,7 +106,7 @@ class TestWriteResult:
             original_text="@agent Task",
         )
 
-        with pytest.raises(IndexError, match="out of range"):
+        with pytest.raises(ValueError, match="not found in file"):
             write_result(str(note), instruction, "Result")
 
     def test_write_result_with_multiline_output(self, tmp_path) -> None:
@@ -194,5 +203,195 @@ class TestWriteError:
             original_text="@agent Original",
         )
 
-        with pytest.raises(ValueError, match="has changed"):
+        with pytest.raises(ValueError, match="not found in file"):
             write_error(str(note), instruction, "Reason")
+
+
+class TestReplaceInstructionAfterFileModification:
+    """Tests for writing results when file has been modified
+    by agent during dispatch."""
+
+    def test_write_result_finds_instruction_after_line_shift(self, tmp_path):
+        """write_result succeeds even when instruction moved to a different line."""
+        note = tmp_path / "note.md"
+        # Original content when parsed — instruction is on line 2
+        original_content = "# Title\n@echo Hello world\nMore content\n"
+        note.write_text(original_content)
+
+        instructions = parse_instructions(original_content)
+        assert len(instructions) == 1
+        instruction = instructions[0]
+        assert instruction.line_number == 2  # line 2 in original
+
+        # Simulate agent modifying the file during dispatch — adds lines above
+        modified_content = (
+            "# Title\nAgent added this line\nAnother new line\n"
+            "@echo Hello world\nMore content\n"
+        )
+        note.write_text(modified_content)
+
+        # write_result should still find and replace the instruction
+        write_result(str(note), instruction, "Hello world")
+
+        final = note.read_text()
+        assert "<!-- @done echo: Hello world" in final
+        assert "/@done -->" in final
+        assert "@echo Hello world" not in final
+        # Surrounding content preserved
+        assert "# Title" in final
+        assert "Agent added this line" in final
+        assert "More content" in final
+
+    def test_write_result_when_instruction_no_longer_in_file(self, tmp_path):
+        """write_result raises when instruction text is completely gone from file."""
+        note = tmp_path / "note.md"
+        original_content = "# Title\n@echo Hello world\n"
+        note.write_text(original_content)
+
+        instructions = parse_instructions(original_content)
+        instruction = instructions[0]
+
+        # Agent removed the instruction line entirely
+        note.write_text("# Title\nSomething completely different\n")
+
+        with pytest.raises(ValueError, match="not found in file"):
+            write_result(str(note), instruction, "Hello world")
+
+    def test_write_error_finds_instruction_after_line_shift(self, tmp_path):
+        """write_error succeeds even when instruction moved to a different line."""
+        note = tmp_path / "note.md"
+        original_content = "@echo Hello world\n"
+        note.write_text(original_content)
+
+        instructions = parse_instructions(original_content)
+        instruction = instructions[0]
+
+        # Simulate line shift
+        note.write_text("New first line\n@echo Hello world\n")
+
+        write_error(str(note), instruction, "Auth required")
+
+        final = note.read_text()
+        assert "<!-- @error echo: Hello world" in final
+        assert "/@error -->" in final
+        assert "@echo Hello world" not in final
+
+
+class TestFormatPending:
+    """Tests for format_pending()."""
+
+    def test_sentinel_embeds_token_and_is_single_line(self) -> None:
+        sentinel = format_pending("echo", "do something", "ab12cd34")
+        assert sentinel == (
+            "<!-- note-watcher: processing [ab12cd34] @echo do something -->"
+        )
+        assert "\n" not in sentinel
+
+    def test_sentinel_is_not_parsed_as_instruction(self) -> None:
+        """The pending sentinel must be ignored by the parser."""
+        sentinel = format_pending("echo", "do something", "ab12cd34")
+        assert parse_instructions(sentinel) == []
+
+    def test_sentinel_is_recoverable_by_parse_pending(self) -> None:
+        """The sentinel round-trips through the recovery parser."""
+        sentinel = format_pending("echo", "do something", "ab12cd34")
+        pending = parse_pending(sentinel)
+        assert len(pending) == 1
+        assert pending[0].token == "ab12cd34"
+        assert pending[0].agent_name == "echo"
+        assert pending[0].instruction_text == "do something"
+
+
+class TestPendingLifecycle:
+    """Tests for write_pending / finalize_result / finalize_error / restore."""
+
+    def _instruction(self) -> Instruction:
+        return Instruction(
+            agent_name="echo",
+            instruction_text="Hello world",
+            line_number=2,
+            original_text="@echo Hello world",
+        )
+
+    def test_write_pending_replaces_instruction_with_sentinel(self, tmp_path):
+        note = tmp_path / "note.md"
+        note.write_text("# Title\n@echo Hello world\nMore\n")
+
+        sentinel = write_pending(str(note), self._instruction())
+
+        content = note.read_text()
+        assert sentinel in content
+        # The original instruction line is gone, and the sentinel that replaced
+        # it must not be re-parsed as a live instruction.
+        assert "\n@echo Hello world\n" not in content
+        assert parse_instructions(content) == []
+
+    def test_write_pending_generates_a_unique_token_per_call(self, tmp_path):
+        """Two identical instructions get distinct sentinels (no collision)."""
+        note = tmp_path / "note.md"
+        note.write_text("@echo Hello world\n@echo Hello world\n")
+
+        first = write_pending(str(note), self._instruction())
+        second = write_pending(
+            str(note),
+            Instruction(
+                agent_name="echo",
+                instruction_text="Hello world",
+                line_number=2,
+                original_text="@echo Hello world",
+            ),
+        )
+
+        assert first != second
+        content = note.read_text()
+        assert first in content
+        assert second in content
+
+    def test_finalize_result_replaces_sentinel_in_place(self, tmp_path):
+        note = tmp_path / "note.md"
+        instruction = self._instruction()
+        note.write_text("# Title\n@echo Hello world\nMore\n")
+        sentinel = write_pending(str(note), instruction)
+
+        finalize_result(str(note), sentinel, instruction, "THE RESULT")
+
+        content = note.read_text()
+        assert sentinel not in content
+        assert "<!-- @done echo: Hello world" in content
+        assert "THE RESULT" in content
+        assert "/@done -->" in content
+        # Result lands where the instruction was, surrounding text preserved.
+        assert "# Title" in content
+        assert "More" in content
+
+    def test_finalize_result_appends_when_sentinel_removed(self, tmp_path):
+        """If the agent deleted the sentinel, the result is appended, not lost."""
+        note = tmp_path / "note.md"
+        instruction = self._instruction()
+        note.write_text("@echo Hello world\n")
+        sentinel = write_pending(str(note), instruction)
+
+        # Agent rewrote the whole file, removing the sentinel.
+        note.write_text("Completely new content from the agent.\n")
+
+        finalize_result(str(note), sentinel, instruction, "THE RESULT")
+
+        content = note.read_text()
+        assert "Completely new content from the agent." in content
+        assert "<!-- @done echo: Hello world" in content
+        assert "THE RESULT" in content
+        assert "/@done -->" in content
+
+    def test_finalize_error_replaces_sentinel(self, tmp_path):
+        note = tmp_path / "note.md"
+        instruction = self._instruction()
+        note.write_text("@echo Hello world\n")
+        sentinel = write_pending(str(note), instruction)
+
+        finalize_error(str(note), sentinel, instruction, "Auth required")
+
+        content = note.read_text()
+        assert sentinel not in content
+        assert "<!-- @error echo: Hello world" in content
+        assert "Auth required" in content
+        assert "/@error -->" in content

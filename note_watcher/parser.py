@@ -23,11 +23,28 @@ DONE_END_PATTERN = re.compile(r"^.*/@done\s*-->$")
 ERROR_START_PATTERN = re.compile(r"^<!--\s*@error\s+(\w+).*$")
 ERROR_END_PATTERN = re.compile(r"^.*/@error\s*-->$")
 
+# In-progress sentinel written by the writer in place of an instruction while
+# its agent runs: `<!-- note-watcher: processing [token] @agent text -->`.
+PENDING_PATTERN = re.compile(
+    r"^<!--\s*note-watcher:\s*processing\s*\[(\w+)\]\s+@(\w+)\s+(.*?)\s*-->$"
+)
+
 
 @dataclass
 class Instruction:
     """A parsed @ mention instruction."""
 
+    agent_name: str
+    instruction_text: str
+    line_number: int
+    original_text: str
+
+
+@dataclass
+class PendingInstruction:
+    """A claimed-but-unfinished instruction recovered from a stale sentinel."""
+
+    token: str
     agent_name: str
     instruction_text: str
     line_number: int
@@ -80,3 +97,33 @@ def parse_instructions(content: str) -> list[Instruction]:
             )
 
     return instructions
+
+
+def parse_pending(content: str) -> list[PendingInstruction]:
+    """Extract in-progress sentinels left by a previous (crashed) run.
+
+    These mark instructions that were claimed but never finished. Recovering
+    them lets a later run re-dispatch and finalize the work.
+
+    Args:
+        content: The full markdown file content.
+
+    Returns:
+        A list of PendingInstruction objects, one per sentinel found.
+    """
+    pending: list[PendingInstruction] = []
+
+    for i, line in enumerate(content.split("\n")):
+        match = PENDING_PATTERN.match(line.strip())
+        if match:
+            pending.append(
+                PendingInstruction(
+                    token=match.group(1),
+                    agent_name=match.group(2),
+                    instruction_text=match.group(3),
+                    line_number=i + 1,  # 1-indexed
+                    original_text=line,
+                )
+            )
+
+    return pending

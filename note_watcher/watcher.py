@@ -9,24 +9,55 @@ from __future__ import annotations
 import fnmatch
 import logging
 import signal
-import sys
+import subprocess
 import time
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from watchdog.events import FileSystemEventHandler, FileModifiedEvent
+from watchdog.events import FileModifiedEvent, FileSystemEventHandler
 from watchdog.observers import Observer
 
 from note_watcher.debouncer import Debouncer
 from note_watcher.dispatcher import AgentDispatcher, UnknownAgentError
-from note_watcher.parser import parse_instructions
+from note_watcher.parser import Instruction, parse_instructions, parse_pending
 from note_watcher.result_validator import AuthFailureError
-from note_watcher.writer import write_error, write_result
+from note_watcher.writer import (
+    finalize_error,
+    finalize_result,
+    format_pending,
+    write_pending,
+)
+
+AUTH_ERROR_MESSAGE = (
+    "Arcade authorization required. Re-run scripts/authorize_arcade.py "
+    "to refresh tokens."
+)
 
 if TYPE_CHECKING:
     from note_watcher.config import Config
 
 logger = logging.getLogger(__name__)
+
+
+class AgentTimeoutError(Exception):
+    """Raised by process_file after one or more instructions time out.
+
+    All instructions in the file are still dispatched and finalized (with
+    @error markers for the ones that timed out) before this is raised, so no
+    work is lost. Callers should treat this as a failed run.
+    """
+
+    def __init__(self, count: int) -> None:
+        """Initialize with the total number of instructions processed.
+
+        Args:
+            count: Number of instructions processed in the file, including
+                the ones that timed out.
+        """
+        self.count = count
+        super().__init__(
+            f"{count} instruction(s) processed but one or more timed out"
+        )
 
 
 class NoteEventHandler(FileSystemEventHandler):
@@ -81,15 +112,62 @@ class NoteEventHandler(FileSystemEventHandler):
         return False
 
 
+def _claim_instructions(
+    file_path: str, dispatcher: AgentDispatcher, instructions: list[Instruction]
+) -> list[tuple[str, Instruction]]:
+    """Replace each instruction line with a sentinel before any dispatch.
+
+    Claiming every instruction up front means that while one agent runs, the
+    others are already parser-neutral sentinels rather than raw ``@agent`` lines
+    a whole-note-editing agent could act on or clobber.
+
+    Instructions whose agent is not configured are left untouched (no sentinel)
+    so the original line remains for the user; they are logged and skipped.
+
+    Returns:
+        A list of ``(sentinel, instruction)`` pairs for the claimed work.
+    """
+    claimed: list[tuple[str, Instruction]] = []
+    for instruction in instructions:
+        if instruction.agent_name not in dispatcher.config.agents:
+            logger.warning(
+                "Unknown agent @%s — leaving instruction for later",
+                instruction.agent_name,
+            )
+            continue
+        try:
+            sentinel = write_pending(file_path, instruction)
+        except Exception as e:
+            logger.error(
+                "Could not claim instruction @%s: %s", instruction.agent_name, e
+            )
+            continue
+        claimed.append((sentinel, instruction))
+    return claimed
+
+
 def process_file(file_path: str, dispatcher: AgentDispatcher) -> int:
-    """Parse a file, dispatch instructions, and write results.
+    """Process every @ mention instruction in a file in a single run.
+
+    The flow is claim-all-then-dispatch:
+
+    1. Recover any stale sentinels left by a crashed prior run.
+    2. Parse fresh instructions and claim each one (replace its line with a
+       sentinel) before dispatching anything.
+    3. Dispatch each claimed item, swapping its sentinel for a @done/@error
+       marker. A failure on one instruction never aborts the others.
 
     Args:
         file_path: Path to the markdown file to process.
         dispatcher: The agent dispatcher to use.
 
     Returns:
-        Number of instructions processed.
+        Number of instructions processed (including those recorded as errors).
+
+    Raises:
+        AgentTimeoutError: If any instruction's agent timed out. Raised only
+            after every instruction in the file has been dispatched and
+            finalized.
     """
     path = Path(file_path)
     if not path.exists():
@@ -97,110 +175,73 @@ def process_file(file_path: str, dispatcher: AgentDispatcher) -> int:
         return 0
 
     content = path.read_text()
-    instructions = parse_instructions(content)
 
-    if not instructions:
-        logger.debug("No pending instructions in %s", file_path)
-        return 0
+    # Recover sentinels from a previous run that crashed mid-dispatch. These are
+    # already claimed; reconstruct their exact sentinel line to anchor on.
+    worklist: list[tuple[str, Instruction]] = [
+        (
+            format_pending(p.agent_name, p.instruction_text, p.token),
+            Instruction(
+                agent_name=p.agent_name,
+                instruction_text=p.instruction_text,
+                line_number=p.line_number,
+                original_text=p.original_text,
+            ),
+        )
+        for p in parse_pending(content)
+    ]
+
+    # Claim fresh instructions, then process recovered + freshly claimed work.
+    worklist += _claim_instructions(
+        file_path, dispatcher, parse_instructions(content)
+    )
 
     processed = 0
-    for instruction in instructions:
+    timed_out = False
+    for sentinel, instruction in worklist:
+        logger.info(
+            "Dispatching @%s: %s",
+            instruction.agent_name,
+            instruction.instruction_text[:50],
+        )
         try:
-            logger.info(
-                "Dispatching @%s: %s",
-                instruction.agent_name,
-                instruction.instruction_text[:50],
-            )
             result = dispatcher.dispatch(instruction, file_path=file_path)
-            write_result(file_path, instruction, result)
-            processed += 1
-            logger.info("Wrote result for @%s", instruction.agent_name)
-
-            # Re-read content after each write since line numbers shift
-            # For subsequent instructions, we need to re-parse
-            if processed < len(instructions):
-                content = path.read_text()
-                remaining = parse_instructions(content)
-                if not remaining:
-                    break
-                # Process just the next instruction from the fresh parse
-                # The for loop will naturally move to the next one but we need
-                # to handle the shifted line numbers
-        except AuthFailureError:
-            logger.warning(
-                "Auth failure for @%s: writing error marker",
-                instruction.agent_name,
-            )
-            write_error(
-                file_path,
-                instruction,
-                "Arcade authorization required. Re-run scripts/authorize_arcade.py "
-                "to refresh tokens.",
-            )
-            processed += 1
-        except UnknownAgentError as e:
-            logger.warning("Skipping unknown agent: %s", e)
-        except Exception as e:
-            logger.error("Error processing instruction: %s", e)
-
-    return processed
-
-
-def process_file_reparse(file_path: str, dispatcher: AgentDispatcher) -> int:
-    """Parse a file, dispatch instructions one at a time, re-parsing after each.
-
-    This handles the line-number shift problem by re-parsing after each write.
-
-    Args:
-        file_path: Path to the markdown file to process.
-        dispatcher: The agent dispatcher to use.
-
-    Returns:
-        Number of instructions processed.
-    """
-    path = Path(file_path)
-    processed = 0
-
-    while True:
-        if not path.exists():
-            logger.warning("File no longer exists: %s", file_path)
-            break
-
-        content = path.read_text()
-        instructions = parse_instructions(content)
-
-        if not instructions:
-            break
-
-        instruction = instructions[0]
-        try:
-            logger.info(
-                "Dispatching @%s: %s",
-                instruction.agent_name,
-                instruction.instruction_text[:50],
-            )
-            result = dispatcher.dispatch(instruction, file_path=file_path)
-            write_result(file_path, instruction, result)
-            processed += 1
+            finalize_result(file_path, sentinel, instruction, result)
             logger.info("Wrote result for @%s", instruction.agent_name)
         except AuthFailureError:
             logger.warning(
                 "Auth failure for @%s: writing error marker",
                 instruction.agent_name,
             )
-            write_error(
-                file_path,
-                instruction,
-                "Arcade authorization required. Re-run scripts/authorize_arcade.py "
-                "to refresh tokens.",
-            )
-            processed += 1
+            finalize_error(file_path, sentinel, instruction, AUTH_ERROR_MESSAGE)
         except UnknownAgentError as e:
-            logger.warning("Skipping unknown agent: %s", e)
-            break
+            # Only reachable for recovered sentinels whose agent is no longer
+            # configured (fresh unknown agents are filtered before claiming).
+            logger.warning("Unknown agent for recovered instruction: %s", e)
+            finalize_error(
+                file_path,
+                sentinel,
+                instruction,
+                f"Unknown agent: {instruction.agent_name!r}",
+            )
+        except subprocess.TimeoutExpired as e:
+            logger.error("Timeout for @%s: %s", instruction.agent_name, e)
+            timed_out = True
+            finalize_error(
+                file_path,
+                sentinel,
+                instruction,
+                f"Agent timed out after {e.timeout}s",
+            )
         except Exception as e:
-            logger.error("Error processing instruction: %s", e)
-            break
+            logger.error("Error processing @%s: %s", instruction.agent_name, e)
+            finalize_error(
+                file_path, sentinel, instruction, f"Unexpected error: {e}"
+            )
+        processed += 1
+
+    if timed_out:
+        raise AgentTimeoutError(processed)
 
     return processed
 
@@ -219,7 +260,12 @@ def start_watcher(config: Config) -> None:
     dispatcher = AgentDispatcher(config)
 
     def on_file_changed(file_path: str) -> None:
-        process_file_reparse(file_path, dispatcher)
+        try:
+            process_file(file_path, dispatcher)
+        except AgentTimeoutError as e:
+            # The daemon keeps watching; the @error marker already written
+            # by process_file is the durable record of the timeout.
+            logger.error("%s: %s", file_path, e)
 
     debouncer = Debouncer(
         interval=config.debounce_seconds,

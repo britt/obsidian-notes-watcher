@@ -4,13 +4,14 @@ Tests the end-to-end flow: file content → parse → dispatch → write.
 """
 
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
 from note_watcher.config import AgentConfig, Config
 from note_watcher.dispatcher import AgentDispatcher
 from note_watcher.parser import parse_instructions
-from note_watcher.watcher import process_file_reparse
+from note_watcher.watcher import process_file
 from note_watcher.writer import write_result
 
 
@@ -81,7 +82,7 @@ class TestEndToEnd:
             "@uppercase Second\n"
         )
 
-        count = process_file_reparse(str(note), dispatcher)
+        count = process_file(str(note), dispatcher)
         assert count == 2
 
         final = note.read_text()
@@ -98,14 +99,14 @@ class TestEndToEnd:
         note.write_text("@echo Process me once\n")
 
         # First run
-        count1 = process_file_reparse(str(note), dispatcher)
+        count1 = process_file(str(note), dispatcher)
         assert count1 == 1
 
         content_after_first = note.read_text()
         assert "<!-- @done echo: Process me once" in content_after_first
 
         # Second run - should find nothing to process
-        count2 = process_file_reparse(str(note), dispatcher)
+        count2 = process_file(str(note), dispatcher)
         assert count2 == 0
 
         # Content should be unchanged after second run
@@ -124,7 +125,7 @@ class TestEndToEnd:
             "@uppercase Process this new one\n"
         )
 
-        count = process_file_reparse(str(note), dispatcher)
+        count = process_file(str(note), dispatcher)
         assert count == 1
 
         final = note.read_text()
@@ -176,15 +177,93 @@ class TestEndToEnd:
         note.write_text("@echo Idempotent test\n")
 
         # Process three times
-        process_file_reparse(str(note), dispatcher)
+        process_file(str(note), dispatcher)
         content1 = note.read_text()
 
-        process_file_reparse(str(note), dispatcher)
+        process_file(str(note), dispatcher)
         content2 = note.read_text()
 
-        process_file_reparse(str(note), dispatcher)
+        process_file(str(note), dispatcher)
         content3 = note.read_text()
 
         # All should be identical
         assert content1 == content2 == content3
         assert content1.count("<!-- @done") == 1
+
+    def test_multiple_instructions_with_agent_file_modification(
+        self, tmp_path: Path, dispatcher: AgentDispatcher
+    ) -> None:
+        """Multiple instructions processed even when agent
+        modifies file during dispatch."""
+        note = tmp_path / "note.md"
+        note.write_text(
+            "# Weekly Review\n"
+            "\n"
+            "@echo Reformat the meetings column\n"
+            "\n"
+            "Some notes in between.\n"
+            "\n"
+            "@uppercase Summarize the review\n"
+        )
+
+        # Patch dispatcher to simulate agent modifying the file during dispatch
+        original_dispatch = dispatcher.dispatch
+
+        def modifying_dispatch(instruction, **kwargs):
+            result = original_dispatch(instruction, **kwargs)
+            # Simulate agent inserting lines at top of file (shifts all line numbers)
+            current = note.read_text()
+            note.write_text("<!-- agent was here -->\n" + current)
+            return result
+
+        with patch.object(dispatcher, "dispatch", side_effect=modifying_dispatch):
+            count = process_file(str(note), dispatcher)
+
+        assert count == 2
+
+        final = note.read_text()
+        assert final.count("<!-- @done") == 2
+        assert final.count("/@done -->") == 2
+        assert "Reformat the meetings column" in final
+        assert "SUMMARIZE THE REVIEW" in final
+
+    def test_done_marker_written_when_agent_removes_instruction_line(
+        self, tmp_path: Path, dispatcher: AgentDispatcher
+    ) -> None:
+        """Issue #12: an agent that follows its instruction well and rewrites
+        the note (removing the original @instruction line) still gets a @done
+        marker with its response written back."""
+        note = tmp_path / "note.md"
+        note.write_text(
+            "# Weekly Review\n"
+            "\n"
+            "@echo reformat the meetings section\n"
+            "\n"
+            "Notes here.\n"
+        )
+
+        def rewriting_dispatch(instruction, **kwargs):
+            # Agent rewrites the note, consuming the original @echo line.
+            note.write_text(
+                "# Weekly Review\n"
+                "\n"
+                "## Meetings (reformatted)\n"
+                "\n"
+                "Notes here.\n"
+            )
+            return "AGENT_RESPONSE_TEXT"
+
+        with patch.object(dispatcher, "dispatch", side_effect=rewriting_dispatch):
+            count = process_file(str(note), dispatcher)
+
+        final = note.read_text()
+        # The agent's modifications are preserved.
+        assert "## Meetings (reformatted)" in final
+        # The completion marker is written and the response is pasted in.
+        assert count == 1
+        assert final.count("<!-- @done") == 1
+        assert "<!-- @done echo: reformat the meetings section" in final
+        assert "AGENT_RESPONSE_TEXT" in final
+        assert "/@done -->" in final
+        # No raw instruction remains.
+        assert "@echo reformat the meetings section" not in final

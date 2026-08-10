@@ -1,18 +1,18 @@
-# Changelog
+---
+title: Release notes
+---
 
-## v0.4.1 - Arcade authentication handling
+# Release notes
 
-- Date: 2026-03-13
-- Version: 0.4.1
+## v0.4.2 - Update `actions/setup-python` to v6
 
-### Summary
+**Date:** 2026-03-23
 
-This release includes Arcade authentication handling updates and a pre-flight validation command.
+**Version:** 0.4.2
 
-### New Features
-
-- Added Arcade authentication URL detection, recorded authentication failures with `@error` instead of `@done`, and introduced the `note-watcher check-arcade` command for pre-flight token validation.
+Summary: This release covers CI workflow maintenance and a patch version update.
 
 ### Additional Changes
 
-- Updated distribution metadata and versioning to `0.4.1` to ship Arcade auth detection, `@error` markers, and the `check-arcade` pre-flight command.
+- Updated GitHub Actions workflows and the composite action to use `actions/setup-python@v6`.
+- Updated package version from `0.4.1` to `0.4.2`.

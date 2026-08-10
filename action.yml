@@ -20,9 +20,9 @@ inputs:
     required: false
     default: '3.11'
   version:
-    description: 'notes-watcher package version to install (e.g. "0.1.0"). Defaults to latest.'
+    description: 'notes-watcher package version to install (e.g. "0.1.0"). Defaults to the version matching this action release; use "latest" to always install the newest release.'
     required: false
-    default: ''
+    default: '0.4.5'
   commit:
     description: 'Whether to commit and push results automatically'
     required: false
@@ -35,7 +35,7 @@ inputs:
 runs:
   using: 'composite'
   steps:
-    - uses: actions/setup-python@v5
+    - uses: actions/setup-python@v7
       with:
         python-version: ${{ inputs.python-version }}
 
@@ -44,10 +44,10 @@ runs:
       env:
         VERSION: ${{ inputs.version }}
       run: |
-        if [ -n "$VERSION" ]; then
-          pip install "notes-watcher==$VERSION"
-        else
+        if [ -z "$VERSION" ] || [ "$VERSION" = "latest" ]; then
           pip install notes-watcher
+        else
+          pip install "notes-watcher==$VERSION"
         fi
 
     - name: Process notes
@@ -55,7 +55,11 @@ runs:
       env:
         CONFIG: ${{ inputs.config }}
         VAULT: ${{ inputs.vault }}
-      run: note-watcher process --all --config "$CONFIG" --vault "$VAULT"
+      run: |
+        # Sync to the branch tip (checkout pins to the triggering SHA) so a run
+        # queued behind another doesn't reprocess instructions it already committed.
+        git pull --ff-only
+        note-watcher process --all --config "$CONFIG" --vault "$VAULT"
 
     - name: Commit results
       if: inputs.commit == 'true'
