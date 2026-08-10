@@ -1,8 +1,8 @@
 # Note Watcher
 
-A tool that detects `@` mentions in Obsidian markdown notes stored in Git and dispatches instructions to configured agents — like [Claude Code](https://docs.anthropic.com/en/docs/claude-code) — that can read, modify, and reorganize your notes directly.
+A tool that detects `@` mentions in Obsidian markdown notes stored in Git and dispatches each instruction to configured agents — like [Claude Code](https://docs.anthropic.com/en/docs/claude-code) — that can read, modify, and reorganize your notes directly.
 
-Write `@agent_name do something` in any note, and Note Watcher dispatches the instruction to the named agent. The agent can edit files, create new notes, restructure content, or make any other changes to your vault. The original instruction is then replaced with a completion marker (an HTML comment, invisible in rendered markdown) so it is never reprocessed:
+Write `@agent_name do something` in any note, and Note Watcher processes all mentions in a note in one run, so multi-`@agent` notes finish together instead of leaving later instructions behind. Each item ends inline with an HTML comment marker such as `@done` or `@error`, so the note records the result where it started:
 
 ```markdown
 <!-- @done agent_name: do something
@@ -10,6 +10,7 @@ Agent response summary goes here.
 /@done -->
 ```
 
+The agent commits its changes back to Git.
 If an instruction fails, Note Watcher can write an error marker instead of `@done`:
 
 ```markdown
@@ -27,7 +28,7 @@ The real work happens in the commit: the agent's changes to your vault are commi
 | Mode | Use case |
 |------|----------|
 | **Daemon** | Real-time file watching on macOS via a LaunchAgent |
-| **GitHub Action** | One-shot batch processing on every push that changes `.md` files |
+| **GitHub Action** | One-shot processing of all known instructions on every push that changes `.md` files |
 
 ## Requirements
 
@@ -101,10 +102,11 @@ Command agents include a default system prompt that tells the agent about the va
 > The user has left an instruction in the note at {file_path}.
 > Read the note, then modify it as requested by the instruction.
 > If the user asks for changes to a note without specifying which one, apply the changes to the same note that contains the instruction.
+> Preserve the HTML comment markers that Note Watcher uses for pending, done, and error states.
 > After making your changes, commit them to git.
 > Respond with a brief summary of what you did.
 
-This works out of the box — you only need to configure a system prompt if you want different behavior.
+This works out of the box — only configure a different system prompt when a different workflow is needed.
 
 #### Overriding the default prompt
 
@@ -130,6 +132,8 @@ agents:
 ```
 
 You cannot set both `system_prompt` and `system_prompt_file` on the same agent — Note Watcher will raise an error if you do.
+
+Custom prompts and whole-note-editing agents must preserve the HTML comment markers that Note Watcher uses for pending, done, and error states.
 
 #### Template variables
 
@@ -217,7 +221,7 @@ To also remove the log directory:
 
 ## GitHub Action Mode
 
-GitHub Action mode processes all pending `@` instructions across the entire vault in a single batch run. This is useful for vaults stored in a Git repository.
+GitHub Action mode processes all pending `@` instructions across the entire vault in a single run. It claims every known instruction before dispatch, so multi-mention notes complete together instead of stopping after the first failure. Tokenized pending sentinels let interrupted runs recover unfinished work on the next pass, so reruns stay safe and idempotent. Each completed instruction becomes an inline `@done` comment, and each failed instruction becomes an inline `@error` comment. This is useful for vaults stored in a Git repository.
 
 ### CLI usage
 
@@ -235,8 +239,11 @@ To set it up:
 2. Add a `config.yml` to your notes repo (see `examples/github-action/config.example.yml`)
 3. Add your `ANTHROPIC_API_KEY` as a repository secret
 
-The example workflow already includes `permissions: contents: write`, which is required for the action to push processed results back to your repository. If you write your own workflow, make sure to include this permission block.
+The example workflow already includes `permissions: contents: write`. That permission block lets the action push processed results back to the repository. Custom workflows need the same permission block.
 
+The workflow triggers on any push that modifies `.md` files, processes all unprocessed `@` instructions, and commits the agent's changes back to the repository. It uses `[skip ci]` to prevent infinite loops.
+
+The repository also includes `.github/workflows/sync-issues-to-project.yml`, which backfills open issues into Projects v2 project 13 and keeps opened or reopened issues in sync with that project.
 The example workflow also includes a `concurrency` group keyed on the branch, with `cancel-in-progress: false`. This queues runs triggered by rapid, overlapping pushes instead of letting them race to commit at the same time — without it, a push that lands while a prior run is still processing can make that later run's commit fail. If you write your own workflow, include this too:
 
 ```yaml

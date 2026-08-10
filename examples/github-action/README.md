@@ -1,6 +1,6 @@
 # Note Watcher GitHub Action Example
 
-This example shows how to set up Note Watcher as a GitHub Action in your Obsidian notes repository. It uses [Claude Code](https://docs.anthropic.com/en/docs/claude-code) as the agent, but Note Watcher can run any command — `claude -p` is just one option. Any program that reads from stdin and writes to stdout works as a `command` agent (see the [agent types](../../README.md#agent-types) in the main README).
+This example shows how to set up Note Watcher as a GitHub Action in your Obsidian notes repository. It uses the `britt/obsidian-notes-watcher` action and [Claude Code](https://docs.anthropic.com/en/docs/claude-code) as the agent, but Note Watcher can run any command — `claude -p` is just one option. Any program that reads from stdin and writes to stdout works as a `command` agent (see the [agent types](../../README.md#agent-types) in the main README).
 
 ## Setup
 
@@ -15,10 +15,11 @@ When you push changes to `.md` files, the workflow:
 
 1. Checks out your repository
 2. Sets up Claude Code (only needed for the Claude agent in this example)
-3. Runs the `britt/obsidian-notes-watcher` action, which installs Note Watcher and processes all unprocessed `@` instructions
-4. The agent (e.g. Claude Code) can read, edit, create, and reorganize notes across your vault — not just reply in a comment
-5. All changes are committed and pushed back to your repository
-6. Uses `[skip ci]` to prevent infinite workflow loops
+3. Runs the `britt/obsidian-notes-watcher` action. By default, it installs the Note Watcher package release that matches the action release; set `latest` to keep the unpinned install behavior and always use the newest release
+4. The action processes all unprocessed `@` instructions in one run, writes each result inline, and leaves completed instructions alone on later runs
+5. The agent (e.g. Claude Code) can read, edit, create, and reorganize notes across your vault — not just reply in a comment
+6. All changes are committed and pushed back to your repository
+7. Uses `[skip ci]` to prevent infinite workflow loops
 
 ## Action inputs
 
@@ -27,7 +28,7 @@ When you push changes to `.md` files, the workflow:
 | `vault` | `.` | Path to the Obsidian vault (relative to repo root) |
 | `config` | `config.yml` | Path to the Note Watcher config file |
 | `python-version` | `3.11` | Python version to use |
-| `version` | matches the action release | Note Watcher package version to install; use `latest` to track the newest release |
+| `version` | matches the action release | Note Watcher package version to install. The default matches the action release; set `latest` to keep the unpinned install behavior and always use the newest release. |
 | `commit` | `true` | Whether to commit and push results automatically |
 | `commit-message` | `Process note instructions [skip ci]` | Commit message to use |
 
@@ -54,7 +55,7 @@ agents:
     system_prompt_file: prompts/claude.md
 ```
 
-Custom prompts support the same template variables as the default: `{vault_path}` (absolute path to the vault) and `{file_path}` (path to the note being processed). The resolved prompt is always available via the `NOTE_WATCHER_SYSTEM_PROMPT` environment variable. See the [system prompts section](../../README.md#system-prompts) in the main README for full details.
+Custom prompts support the same template variables as the default: `{vault_path}` (absolute path to the vault) and `{file_path}` (path to the note being processed). The resolved prompt is always available via the `NOTE_WATCHER_SYSTEM_PROMPT` environment variable. Pending and completion markers stay in HTML comments, so custom prompts and any note editing agent must preserve them. See the [system prompts section](../../README.md#system-prompts) in the main README for full details.
 
 ## Example
 
@@ -64,11 +65,11 @@ Write `@claude` instructions in your notes:
 @claude Summarize the key points of this meeting and add action items to my Tasks note
 ```
 
-After the workflow runs, Claude Code edits your vault (creating or updating notes as needed), and the original instruction is replaced with a completion marker:
+After the workflow runs, Note Watcher edits your vault in place, handles every unprocessed instruction in one pass, and leaves completed instructions alone on later runs. A note with more than one `@` instruction finishes in the same run, and a rerun resumes any pending instruction or finalizes it without repeating finished work.
 
 ```markdown
 <!-- @done claude: Summarize the key points of this meeting and add action items to my Tasks note
-Added summary and extracted 3 action items to Tasks.md.
+Added summary and extracted 3 action items to Tasks.md. A later run leaves this completed instruction alone.
 /@done -->
 ```
 
