@@ -11,6 +11,17 @@ Agent response summary goes here.
 ```
 
 The agent commits its changes back to Git.
+If an instruction fails, Note Watcher can write an error marker instead of `@done`:
+
+```markdown
+<!-- @error agent_name: do something
+Reason for failure goes here.
+/@error -->
+```
+
+`@error` blocks are skipped by the parser (like `@done` blocks), so they are not reprocessed automatically. To retry an instruction, delete the `@error` block and re-add the instruction line.
+
+The real work happens in the commit: the agent's changes to your vault are committed back to Git. The completion comment is just a record that the instruction was processed.
 
 ## Modes of Operation
 
@@ -233,6 +244,32 @@ The example workflow already includes `permissions: contents: write`. That permi
 The workflow triggers on any push that modifies `.md` files, processes all unprocessed `@` instructions, and commits the agent's changes back to the repository. It uses `[skip ci]` to prevent infinite loops.
 
 The repository also includes `.github/workflows/sync-issues-to-project.yml`, which backfills open issues into Projects v2 project 13 and keeps opened or reopened issues in sync with that project.
+The example workflow also includes a `concurrency` group keyed on the branch, with `cancel-in-progress: false`. This queues runs triggered by rapid, overlapping pushes instead of letting them race to commit at the same time — without it, a push that lands while a prior run is still processing can make that later run's commit fail. If you write your own workflow, include this too:
+
+```yaml
+concurrency:
+  group: note-watcher-${{ github.ref }}
+  cancel-in-progress: false
+```
+
+The workflow triggers on any push that modifies `.md` files, processes all unprocessed `@` instructions, and commits the agent's changes back to your repository. It uses `[skip ci]` to prevent infinite loops.
+
+### Upgrading an existing installation to fix overlapping-push failures
+
+If you installed this workflow before the `concurrency` block above was added, a push with an `@mention` that lands while an earlier `@mention` push is still processing can make the later run fail (issue #28). To fix an existing installation:
+
+1. Open the workflow file you copied into your notes repository (e.g. `.github/workflows/note-watcher.yml`).
+2. Add the `concurrency` block shown above, at the top level of the workflow (alongside `on:` and `permissions:`, not inside `jobs:`):
+   ```yaml
+   concurrency:
+     group: note-watcher-${{ github.ref }}
+     cancel-in-progress: false
+   ```
+   This part only lives in your own workflow file — the action can't set it on your behalf — so it always requires this manual edit, no matter how you reference the action below.
+3. Check how your workflow references the action:
+   - `uses: britt/obsidian-notes-watcher@main` — no further action needed. The other half of the fix (resyncing before processing) lives in `action.yml` itself and takes effect automatically on your next run once it's merged to `main`.
+   - `uses: britt/obsidian-notes-watcher@v0.4.x` (or any other pinned tag/SHA) — bump the pin to a release that includes this fix (v0.4.5 or later) once one is published.
+4. Commit and push the workflow change. No config or vault changes are needed.
 
 See the [Claude Code GitHub Actions documentation](https://docs.anthropic.com/en/docs/claude-code/github-actions) for more on setting up Claude Code in CI.
 
@@ -310,6 +347,29 @@ You'll need to re-run the script if:
 - An OAuth token is revoked or expires
 - You add new services to your gateway
 - Your Google Cloud OAuth app is in "testing" mode (tokens expire after 7 days — publish the app or set it to "internal" for Google Workspace orgs to avoid this)
+
+### Checking Arcade authorization status
+
+Use `note-watcher check-arcade` to see which Arcade services are authorized for a given user ID before running agents:
+
+```bash
+note-watcher check-arcade --user-id you@example.com
+```
+
+To check specific services only, pass `--services` multiple times:
+
+```bash
+note-watcher check-arcade --user-id you@example.com \
+  --services gmail \
+  --services slack
+```
+
+The command prints two sections:
+
+- `Authorized:` services with valid tokens
+- `Needs authorization:` services that require OAuth
+
+It also prints a `python scripts/authorize_arcade.py ...` command that can be used to authorize any missing services. `check-arcade` is informational only and always exits with status code 0.
 
 ### Configuring the MCP server for Claude Code
 

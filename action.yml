@@ -22,7 +22,7 @@ inputs:
   version:
     description: 'notes-watcher package version to install (e.g. "0.1.0"). Defaults to the version matching this action release; use "latest" to always install the newest release.'
     required: false
-    default: '0.4.3'
+    default: '0.4.5'
   commit:
     description: 'Whether to commit and push results automatically'
     required: false
@@ -55,7 +55,11 @@ runs:
       env:
         CONFIG: ${{ inputs.config }}
         VAULT: ${{ inputs.vault }}
-      run: note-watcher process --all --config "$CONFIG" --vault "$VAULT"
+      run: |
+        # Sync to the branch tip (checkout pins to the triggering SHA) so a run
+        # queued behind another doesn't reprocess instructions it already committed.
+        git pull --ff-only
+        note-watcher process --all --config "$CONFIG" --vault "$VAULT"
 
     - name: Commit results
       if: inputs.commit == 'true'
