@@ -9,6 +9,19 @@ This example shows how to set up Note Watcher as a GitHub Action in your Obsidia
 3. Add your `ANTHROPIC_API_KEY` as a repository secret under **Settings > Secrets and variables > Actions** (only needed for the Claude agent — swap in your own command and secrets as needed)
 4. Under **Settings > Actions > General**, set "Workflow permissions" to "Read and write permissions"
 
+## Concurrent runs
+
+This example uses a workflow-level `concurrency` block keyed on `github.ref`. With `cancel-in-progress: false`, overlapping runs on the same ref queue instead of canceling or racing each other. That keeps a later run from trying to commit while an earlier run is still active.
+
+The action also runs `git pull --ff-only` before it processes notes. That resync moves a queued run to the latest branch tip before processing begins, which helps prevent duplicate processing and push conflicts.
+
+If this example was copied before v0.4.5:
+
+- Add the `concurrency` block to the copied workflow file.
+- If the workflow pins `uses: britt/obsidian-notes-watcher@...`, update it to v0.4.5 or later so it picks up the resync fix from the action itself.
+
+See the [GitHub Action Mode section](../../README.md#github-action-mode) in the main README for the full setup guidance.
+
 ## How it works
 
 When you push changes to `.md` files, the workflow:
